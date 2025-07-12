@@ -8,13 +8,15 @@ HiicHiveIDE 是一个专为内部团队使用的轻量级数据血缘分析工�
 
 - 🔍 **智能血缘分析**: 实时解析 Hive SQL 语句，自动提取表级和字段级血缘关系
 - 📊 **元数据管理**: 自动爬取并管理 Hive 表和列信息，提供实时统计数据
-- 🔧 **Git 集成**: 连接 GitLab/GitHub，支持代码管理和批量分析
+- 🔧 **Git 集成**: 连接 GitLab/GitHub，支持内网私有仓库和SSL证书验证跳过
 - ✏️ **SQL 编辑器**: 基于 Monaco Editor 的智能 SQL 编辑器，支持自动补全和实时血缘图展示
 - 📈 **双层可视化**: 表级血缘图（基于 AntV G6）+ 字段级血缘图（自定义SVG渲染）
-- 🎯 **交互式血缘图**: 字段高亮、连线跟踪、鼠标悬停效果、表名智能省略
+- 🎯 **交互式血缘图**: 字段高亮、连线跟踪、双击复制、全屏模式、重置视角
 - 📥 **血缘图导出**: 支持 PNG/SVG 格式下载，便于文档制作和分享
 - 📱 **响应式设计**: 完美适配移动端和小屏幕设备
 - 👥 **用户管理**: 支持多用户独立配置 Git 仓库
+- 🚀 **SQLFlow 集成**: 自动启动本地 SQLFlow 解析引擎，端口 19600
+- 🗂️ **自动化部署**: 智能数据库初始化和服务管理
 
 ## 技术架构
 
@@ -73,6 +75,34 @@ HiicHiveIDE/
 
 ### 快速开始
 
+#### 自动化安装（推荐）
+
+1. **克隆项目**
+```bash
+git clone <repository-url>
+cd HiicHiveIDE
+```
+
+2. **运行初始化脚本**
+```bash
+# Linux/macOS
+./scripts/init.sh
+
+# Windows
+scripts\init.bat
+```
+
+3. **启动所有服务**
+```bash
+# Linux/macOS
+./scripts/start.sh
+
+# Windows
+scripts\start.bat
+```
+
+#### 手动安装
+
 1. **克隆项目**
 ```bash
 git clone <repository-url>
@@ -126,13 +156,19 @@ HIVE_CONFIG = {
 ```
 
 ### SQL 解析服务配置
-配置外部 SQL 解析服务地址：
+配置 SQLFlow 解析服务地址（脚本会自动启动本地服务）：
 
 ```python
 SQLFLOW_CONFIG = {
-    'url': 'http://localhost:9600/sqlflow/datalineage',
+    'url': 'http://localhost:19600/sqlflow/datalineage',
     'timeout': 30,
+    'mock_mode': False,  # 使用真实的SQLFlow服务
 }
+```
+
+**注意**: SQLFlow 服务会在启动脚本中自动启动，使用本地 jar 包：
+```bash
+java -jar sqlflow_engine_lite/java_data_lineage-1.1.2.jar --server.host=localhost --server.port=19600
 ```
 
 ## 使用指南
@@ -152,9 +188,13 @@ python manage.py crawl_metadata
 ### 2. Git 集成
 
 **配置 Git 仓库**
-1. 登录系统
-2. 在前端界面配置 Git 仓库信息
+1. 在前端界面配置 Git 仓库信息
+2. 支持内网私有 GitLab，可关闭 SSL 证书验证
 3. 同步仓库代码
+
+**GitLab SSL 配置**
+- 内网私有 GitLab 建议禁用 SSL 验证
+- 添加仓库时可选择 "禁用 SSL 验证" 选项
 
 **API 端点**
 - `POST /api/git/repos/` - 创建 Git 仓库配置
@@ -205,8 +245,11 @@ GET /api/metadata/tables/statistics/
 - 双模式可视化：
   - **表级血缘图**: 基于 AntV G6 的节点连线图，支持图形下载
   - **字段级血缘图**: 自定义 SVG 渲染，源表在左，目标表在右
-  - **智能表名处理**: 自动省略库名，长表名智能截断，悬停显示完整名称
+  - **完整表名显示**: 显示完整的表名和字段名，不再省略
   - **交互功能**: 鼠标悬停字段高亮相关连线和依赖字段
+  - **双击复制**: 双击表名或字段名自动复制到剪贴板
+  - **全屏模式**: 支持血缘图全屏显示，ESC 键退出
+  - **重置视角**: 一键重置图形缩放和位置到默认状态
   - **导出功能**: 支持 PNG 和 SVG 格式下载
 
 ### 5. 响应式设计

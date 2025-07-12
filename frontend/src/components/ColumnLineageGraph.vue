@@ -119,6 +119,30 @@ const totalColumns = computed(() => {
   return props.columnGraph?.tables.reduce((total, table) => total + table.columns.length, 0) || 0
 })
 
+// 复制到剪贴板的函数
+const copyToClipboard = (text: string) => {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => {
+      ElMessage.success(`已复制: ${text}`)
+    }).catch(() => {
+      ElMessage.error('复制失败')
+    })
+  } else {
+    // 降级方案
+    const textArea = document.createElement('textarea')
+    textArea.value = text
+    document.body.appendChild(textArea)
+    textArea.select()
+    try {
+      document.execCommand('copy')
+      ElMessage.success(`已复制: ${text}`)
+    } catch {
+      ElMessage.error('复制失败')
+    }
+    document.body.removeChild(textArea)
+  }
+}
+
 // 渲染字段级血缘图
 const renderColumnGraph = () => {
   if (!graphContainer.value || !props.columnGraph || props.columnGraph.tables.length === 0) {
@@ -166,8 +190,8 @@ const renderColumnGraph = () => {
   const sourceTables = props.columnGraph.tables.filter(t => t.type === 'source')
   const targetTables = props.columnGraph.tables.filter(t => t.type === 'target')
   
-  // 计算布局参数
-  const tableWidth = 250
+  // 计算布局参数 - 增加表宽度以适应完整表名
+  const tableWidth = 350
   const tableHeaderHeight = 40
   const columnHeight = 25
   const tableSpacing = 100
@@ -196,18 +220,9 @@ const renderColumnGraph = () => {
     headerRect.setAttribute('stroke-width', '2')
     headerRect.setAttribute('rx', '4')
     
-    // 表名处理 - 自适应文本和省略库名
+    // 表名处理 - 显示完整名称，不再省略
     const getDisplayTableName = (fullName: string, maxWidth: number) => {
-      // 先尝试只显示表名（去掉库名）
-      const parts = fullName.split('.')
-      const tableName = parts.length > 1 ? parts[parts.length - 1] : fullName
-      
-      // 如果表名仍然太长，进行省略
-      if (tableName.length > 20) {
-        return tableName.substring(0, 17) + '...'
-      }
-      
-      return tableName
+      return fullName // 直接返回完整名称
     }
     
     const displayName = getDisplayTableName(table.name, tableWidth - 20)
@@ -225,6 +240,12 @@ const renderColumnGraph = () => {
     const tableNameTitle = document.createElementNS('http://www.w3.org/2000/svg', 'title')
     tableNameTitle.textContent = table.name
     tableName.appendChild(tableNameTitle)
+    
+    // 添加表名双击复制功能
+    tableName.style.cursor = 'pointer'
+    tableName.addEventListener('dblclick', () => {
+      copyToClipboard(table.name)
+    })
     
     tableGroup.appendChild(headerRect)
     tableGroup.appendChild(tableName)
@@ -279,13 +300,19 @@ const renderColumnGraph = () => {
       // 鼠标事件
       const handleMouseEnter = () => highlightColumn(columnId)
       const handleMouseLeave = () => clearHighlight()
+      const handleDoubleClick = () => copyToClipboard(columnId)
       
       columnBg.addEventListener('mouseenter', handleMouseEnter)
       columnBg.addEventListener('mouseleave', handleMouseLeave)
+      columnBg.addEventListener('dblclick', handleDoubleClick)
+      
       columnText.addEventListener('mouseenter', handleMouseEnter)
       columnText.addEventListener('mouseleave', handleMouseLeave)
+      columnText.addEventListener('dblclick', handleDoubleClick)
+      
       connectionPoint.addEventListener('mouseenter', handleMouseEnter)
       connectionPoint.addEventListener('mouseleave', handleMouseLeave)
+      connectionPoint.addEventListener('dblclick', handleDoubleClick)
       
       tableGroup.appendChild(columnBg)
       tableGroup.appendChild(columnText)

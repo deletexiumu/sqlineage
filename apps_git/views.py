@@ -1,7 +1,7 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.models import User
 from .models import GitRepo
@@ -25,13 +25,26 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
 
 class GitRepoViewSet(viewsets.ModelViewSet):
     serializer_class = GitRepoSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]  # 暂时允许匿名访问，适合内部使用
 
     def get_queryset(self):
-        return GitRepo.objects.filter(user=self.request.user)
+        # 如果用户已认证，返回用户的仓库；否则返回所有仓库（适合内部使用）
+        if self.request.user.is_authenticated:
+            return GitRepo.objects.filter(user=self.request.user)
+        else:
+            return GitRepo.objects.all()
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        # 如果用户已认证，关联用户；否则关联默认用户
+        if self.request.user.is_authenticated:
+            serializer.save(user=self.request.user)
+        else:
+            # 获取或创建默认用户
+            default_user, created = User.objects.get_or_create(
+                username='default',
+                defaults={'email': 'default@example.com'}
+            )
+            serializer.save(user=default_user)
 
     @action(detail=True, methods=['post'])
     def sync(self, request, pk=None):

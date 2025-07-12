@@ -340,17 +340,9 @@ const renderGraph = () => {
   const width = container.clientWidth || 800
   const height = 600
 
-  // 表名处理函数
+  // 表名处理函数 - 显示完整名称，不再省略
   const getDisplayTableName = (fullName: string) => {
-    const parts = fullName.split('.')
-    const tableName = parts.length > 1 ? parts[parts.length - 1] : fullName
-    
-    // 如果表名太长，进行省略
-    if (tableName.length > 15) {
-      return tableName.substring(0, 12) + '...'
-    }
-    
-    return tableName
+    return fullName // 直接返回完整名称
   }
 
   // Process data for G6
@@ -402,7 +394,7 @@ const renderGraph = () => {
       default: ['drag-canvas', 'zoom-canvas', 'drag-node'],
     },
     defaultNode: {
-      size: [120, 40],
+      size: [200, 50], // 增加节点宽度和高度以适应完整表名
       style: {
         fill: '#5B8FF9',
         stroke: '#5B8FF9',
@@ -437,6 +429,30 @@ const renderGraph = () => {
 
   graph.value.render()
 
+  // 复制到剪贴板的函数
+  const copyToClipboard = (text: string) => {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(() => {
+        ElMessage.success(`已复制: ${text}`)
+      }).catch(() => {
+        ElMessage.error('复制失败')
+      })
+    } else {
+      // 降级方案
+      const textArea = document.createElement('textarea')
+      textArea.value = text
+      document.body.appendChild(textArea)
+      textArea.select()
+      try {
+        document.execCommand('copy')
+        ElMessage.success(`已复制: ${text}`)
+      } catch {
+        ElMessage.error('复制失败')
+      }
+      document.body.removeChild(textArea)
+    }
+  }
+
   // Add event listeners
   graph.value.on('node:click', (e) => {
     const node = e.item
@@ -445,6 +461,16 @@ const renderGraph = () => {
       // 显示完整的表名
       const fullName = model.originalLabel || model.id
       ElMessage.info(`点击了表: ${fullName}`)
+    }
+  })
+
+  // 添加双击复制功能
+  graph.value.on('node:dblclick', (e) => {
+    const node = e.item
+    const model = node?.getModel()
+    if (model) {
+      const fullName = model.originalLabel || model.id
+      copyToClipboard(fullName)
     }
   })
 
