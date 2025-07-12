@@ -147,6 +147,12 @@ export const gitAPI = {
   
   getCommits: (id: number, limit = 10) =>
     api.get(`/git/repos/${id}/commits/`, { params: { limit } }),
+  
+  getBranches: (id: number) =>
+    api.get(`/git/repos/${id}/branches/`),
+  
+  switchBranch: (id: number, branch: string) =>
+    api.post(`/git/repos/${id}/switch_branch/`, { branch }),
 }
 
 // Lineage API

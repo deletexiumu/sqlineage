@@ -148,6 +148,48 @@ class GitRepoViewSet(viewsets.ModelViewSet):
             )
 
     @action(detail=True, methods=['get'])
+    def branches(self, request, pk=None):
+        """获取远程仓库的分支列表"""
+        git_repo = self.get_object()
+        git_service = GitService(git_repo)
+        
+        try:
+            branches = git_service.get_remote_branches()
+            return Response({
+                'branches': branches,
+                'current_branch': git_repo.branch,
+                'status': 'success'
+            })
+        except Exception as e:
+            return Response({
+                'error': '获取分支列表失败',
+                'details': str(e),
+                'branches': ['main', 'master'],  # 默认分支
+                'status': 'error'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'])
+    def switch_branch(self, request, pk=None):
+        """切换仓库分支"""
+        git_repo = self.get_object()
+        new_branch = request.data.get('branch')
+        
+        if not new_branch:
+            return Response({
+                'error': '分支名称不能为空'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 更新仓库配置中的分支
+        git_repo.branch = new_branch
+        git_repo.save()
+        
+        return Response({
+            'status': 'success',
+            'message': f'分支已切换到 {new_branch}',
+            'current_branch': new_branch
+        })
+
+    @action(detail=True, methods=['get'])
     def commits(self, request, pk=None):
         git_repo = self.get_object()
         git_service = GitService(git_repo)

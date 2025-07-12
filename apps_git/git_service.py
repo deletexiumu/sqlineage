@@ -69,10 +69,13 @@ class GitService:
                     shutil.rmtree(local_path)
                     return self.clone_or_pull()  # 递归调用进行clone
                 
-                # 为git命令设置环境变量
+                # 使用底层Git命令绕过GitPython的refspec检查
                 with self.repo.git.custom_environment(**env_vars):
-                    # 先fetch远程分支
-                    origin.fetch()
+                    # 直接使用git命令设置refspec和fetch
+                    self.repo.git.config('remote.origin.fetch', '+refs/heads/*:refs/heads/*')
+                    
+                    # 使用git命令行直接fetch
+                    self.repo.git.fetch('origin')
                     
                     # 获取当前分支或目标分支
                     try:
@@ -82,16 +85,29 @@ class GitService:
                         current_branch = self.git_repo.branch
                     
                     # 检查远程分支是否存在
-                    remote_branch = f'origin/{current_branch}'
                     try:
-                        self.repo.git.merge(remote_branch)
-                    except git.exc.GitCommandError as merge_error:
-                        # 如果merge失败，尝试checkout到目标分支
-                        if 'not something we can merge' in str(merge_error):
-                            logger.info(f"Checking out branch {current_branch}")
-                            self.repo.git.checkout('-B', current_branch, remote_branch)
-                        else:
-                            raise merge_error
+                        # 列出所有远程分支
+                        remote_branches = self.repo.git.branch('-r').split('\n')
+                        remote_branches = [b.strip().replace('origin/', '') for b in remote_branches if 'origin/' in b and '->' not in b]
+                        
+                        # 如果目标分支不在远程分支列表中，使用默认分支
+                        if current_branch not in remote_branches:
+                            if 'main' in remote_branches:
+                                current_branch = 'main'
+                            elif 'master' in remote_branches:
+                                current_branch = 'master'
+                            elif remote_branches:
+                                current_branch = remote_branches[0]  # 使用第一个可用分支
+                            
+                            logger.info(f"Switching to available branch: {current_branch}")
+                        
+                        # 切换到目标分支
+                        self.repo.git.checkout('-B', current_branch, f'origin/{current_branch}')
+                        
+                    except git.exc.GitCommandError as e:
+                        logger.error(f"Branch operation failed: {str(e)}")
+                        # 尝试reset到remote HEAD
+                        self.repo.git.reset('--hard', 'origin/HEAD')
             else:
                 os.makedirs(os.path.dirname(local_path), exist_ok=True)
                 logger.info(f"Cloning repository {self.git_repo.name}")
@@ -224,6 +240,74 @@ class GitService:
         except Exception as e:
             logger.error(f"Failed to commit and push to {self.git_repo.name}: {str(e)}")
             return False
+
+    def get_remote_branches(self):
+        """获取远程仓库的分支列表"""
+        local_path = self.git_repo.repo_local_path
+        auth_url = self._get_auth_url()
+        
+        # 配置SSL验证选项
+        env_vars = {}
+        if not self.git_repo.ssl_verify:
+            env_vars.update({
+                'GIT_SSL_NO_VERIFY': '1',
+                'GIT_CURL_VERBOSE': '0'
+            })
+        
+        try:
+            # 如果本地仓库不存在，临时clone来获取分支信息
+            if not os.path.exists(local_path):
+                temp_path = f"{local_path}_temp"
+                try:
+                    # 只获取远程引用，不下载完整仓库
+                    clone_env = dict(os.environ)
+                    clone_env.update(env_vars)
+                    
+                    temp_repo = git.Repo.clone_from(
+                        auth_url,
+                        temp_path,
+                        no_checkout=True,  # 不检出文件
+                        env=clone_env
+                    )
+                    
+                    # 获取远程分支列表
+                    remote_refs = temp_repo.git.ls_remote('--heads', 'origin').split('\n')
+                    branches = []
+                    for ref in remote_refs:
+                        if ref.strip():
+                            branch_name = ref.split('\t')[1].replace('refs/heads/', '')
+                            branches.append(branch_name)
+                    
+                    # 清理临时目录
+                    import shutil
+                    shutil.rmtree(temp_path)
+                    
+                    return branches
+                    
+                except Exception as e:
+                    logger.error(f"Failed to get remote branches: {str(e)}")
+                    # 如果临时目录存在，清理它
+                    if os.path.exists(temp_path):
+                        import shutil
+                        shutil.rmtree(temp_path)
+                    return ['main', 'master']  # 返回常见默认分支
+            else:
+                # 使用现有仓库获取分支信息
+                self.repo = git.Repo(local_path)
+                with self.repo.git.custom_environment(**env_vars):
+                    # 先fetch获取最新的远程分支信息
+                    self.repo.git.config('remote.origin.fetch', '+refs/heads/*:refs/heads/*')
+                    self.repo.git.fetch('origin')
+                    
+                    # 获取远程分支列表
+                    remote_branches = self.repo.git.branch('-r').split('\n')
+                    branches = [b.strip().replace('origin/', '') for b in remote_branches if 'origin/' in b and '->' not in b]
+                    
+                    return branches
+                    
+        except Exception as e:
+            logger.error(f"Failed to get remote branches for {self.git_repo.name}: {str(e)}")
+            return ['main', 'master']  # 返回常见默认分支
 
     def get_commit_history(self, limit=10):
         if not self.repo:

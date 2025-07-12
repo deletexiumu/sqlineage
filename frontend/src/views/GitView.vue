@@ -29,10 +29,13 @@
                 {{ scope.row.last_sync ? formatDate(scope.row.last_sync) : '未同步' }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="200">
+            <el-table-column label="操作" width="280">
               <template #default="scope">
                 <el-button size="small" @click="syncRepo(scope.row)" :loading="syncingRepos.has(scope.row.id)">
                   同步
+                </el-button>
+                <el-button size="small" @click="showBranchDialog(scope.row)" type="success">
+                  分支
                 </el-button>
                 <el-button size="small" @click="parseRepo(scope.row)" :loading="parsingRepos.has(scope.row.id)">
                   解析血缘
@@ -87,6 +90,46 @@
       </el-col>
     </el-row>
 
+    <!-- 分支管理对话框 -->
+    <el-dialog v-model="showBranchSelect" title="分支管理" width="400px">
+      <div v-if="currentRepo">
+        <p><strong>仓库:</strong> {{ currentRepo.name }}</p>
+        <p><strong>当前分支:</strong> {{ currentRepo.branch }}</p>
+        
+        <el-divider />
+        
+        <div v-if="branchesLoading">
+          <el-skeleton :rows="3" animated />
+        </div>
+        
+        <div v-else>
+          <h4>可用分支:</h4>
+          <el-radio-group v-model="selectedBranch" style="width: 100%;">
+            <div v-for="branch in availableBranches" :key="branch" style="margin: 10px 0;">
+              <el-radio :label="branch" style="width: 100%;">
+                <span>{{ branch }}</span>
+                <el-tag v-if="branch === currentRepo.branch" type="success" size="small" style="margin-left: 10px;">
+                  当前
+                </el-tag>
+              </el-radio>
+            </div>
+          </el-radio-group>
+        </div>
+      </div>
+      
+      <template #footer>
+        <el-button @click="showBranchSelect = false">取消</el-button>
+        <el-button 
+          type="primary" 
+          @click="switchBranch" 
+          :loading="switchingBranch"
+          :disabled="!selectedBranch || selectedBranch === currentRepo?.branch"
+        >
+          切换分支
+        </el-button>
+      </template>
+    </el-dialog>
+
     <!-- 添加仓库对话框 -->
     <el-dialog v-model="showAddRepo" title="添加Git仓库" width="500px">
       <el-form :model="newRepo" label-width="100px">
@@ -135,10 +178,16 @@ const loading = ref(false)
 const jobsLoading = ref(false)
 const adding = ref(false)
 const showAddRepo = ref(false)
+const showBranchSelect = ref(false)
+const branchesLoading = ref(false)
+const switchingBranch = ref(false)
 const repos = ref<GitRepo[]>([])
 const jobs = ref<LineageParseJob[]>([])
 const syncingRepos = ref(new Set<number>())
 const parsingRepos = ref(new Set<number>())
+const currentRepo = ref<GitRepo | null>(null)
+const availableBranches = ref<string[]>([])
+const selectedBranch = ref('')
 
 const newRepo = ref({
   name: '',
@@ -221,6 +270,55 @@ const parseRepo = async (repo: GitRepo) => {
     ElMessage.error('启动血缘解析失败')
   } finally {
     parsingRepos.value.delete(repo.id)
+  }
+}
+
+const showBranchDialog = async (repo: GitRepo) => {
+  currentRepo.value = repo
+  selectedBranch.value = repo.branch
+  showBranchSelect.value = true
+  
+  // 加载分支列表
+  branchesLoading.value = true
+  try {
+    const response = await gitAPI.getBranches(repo.id)
+    availableBranches.value = response.data.branches || []
+    
+    if (availableBranches.value.length === 0) {
+      ElMessage.warning('未找到可用分支，将使用默认分支')
+      availableBranches.value = ['main', 'master']
+    }
+  } catch (error) {
+    console.error('Load branches error:', error)
+    ElMessage.warning('获取分支列表失败，将显示默认分支')
+    availableBranches.value = ['main', 'master']
+  } finally {
+    branchesLoading.value = false
+  }
+}
+
+const switchBranch = async () => {
+  if (!currentRepo.value || !selectedBranch.value) {
+    return
+  }
+  
+  switchingBranch.value = true
+  try {
+    await gitAPI.switchBranch(currentRepo.value.id, selectedBranch.value)
+    ElMessage.success(`分支已切换到 ${selectedBranch.value}`)
+    
+    // 更新本地仓库信息
+    currentRepo.value.branch = selectedBranch.value
+    
+    // 刷新仓库列表
+    await loadRepos()
+    
+    showBranchSelect.value = false
+  } catch (error) {
+    console.error('Switch branch error:', error)
+    ElMessage.error('切换分支失败')
+  } finally {
+    switchingBranch.value = false
   }
 }
 
