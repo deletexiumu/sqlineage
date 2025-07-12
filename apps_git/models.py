@@ -27,6 +27,7 @@ class GitRepo(models.Model):
     access_mode = models.CharField(max_length=10, choices=ACCESS_MODE_CHOICES, default='clone', help_text='访问模式：本地克隆或API访问')
     branch = models.CharField(max_length=100, default='main')
     ssl_verify = models.BooleanField(default=True, help_text='是否验证SSL证书，内网私有GitLab建议设为False')
+    successful_auth_format = models.CharField(max_length=50, blank=True, help_text='记录最后一次成功的认证格式，用于优化后续认证')
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

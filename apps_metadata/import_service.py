@@ -279,6 +279,7 @@ class MetadataImportService:
                 {
                     'database': 'dwd_zbk',
                     'name': 'user_info',
+                    'comment': '用户信息表',
                     'columns': [
                         {
                             'name': 'user_id',
@@ -289,6 +290,33 @@ class MetadataImportService:
                             'name': 'user_name',
                             'type': 'string',
                             'comment': '用户姓名'
+                        },
+                        {
+                            'name': 'create_time',
+                            'type': 'timestamp',
+                            'comment': '创建时间'
+                        }
+                    ]
+                },
+                {
+                    'database': 'dwd_zbk', 
+                    'name': 'order_info',
+                    'comment': '订单信息表',
+                    'columns': [
+                        {
+                            'name': 'order_id',
+                            'type': 'bigint',
+                            'comment': '订单ID'
+                        },
+                        {
+                            'name': 'user_id',
+                            'type': 'bigint',
+                            'comment': '用户ID'
+                        },
+                        {
+                            'name': 'amount',
+                            'type': 'decimal(10,2)',
+                            'comment': '订单金额'
                         }
                     ]
                 }
@@ -302,12 +330,61 @@ class MetadataImportService:
             }
         elif format_type == 'csv':
             csv_content = "database,table_name,column_name,column_type,column_comment\n"
+            # user_info 表数据
             csv_content += "dwd_zbk,user_info,user_id,bigint,用户ID\n"
             csv_content += "dwd_zbk,user_info,user_name,string,用户姓名\n"
+            csv_content += "dwd_zbk,user_info,create_time,timestamp,创建时间\n"
+            # order_info 表数据
+            csv_content += "dwd_zbk,order_info,order_id,bigint,订单ID\n"
+            csv_content += "dwd_zbk,order_info,user_id,bigint,用户ID\n"
+            csv_content += "dwd_zbk,order_info,amount,decimal(10\\,2),订单金额\n"
             return {
                 'content_type': 'text/csv',
                 'content': csv_content
             }
+        elif format_type == 'excel':
+            # 生成Excel格式数据
+            try:
+                import io
+                from openpyxl import Workbook
+                
+                wb = Workbook()
+                ws = wb.active
+                ws.title = "元数据模板"
+                
+                # 添加表头
+                headers = ['database', 'table_name', 'column_name', 'column_type', 'column_comment']
+                for col, header in enumerate(headers, 1):
+                    ws.cell(row=1, column=col, value=header)
+                
+                # 添加示例数据
+                row = 2
+                for table in sample_data['tables']:
+                    for column in table['columns']:
+                        ws.cell(row=row, column=1, value=table['database'])
+                        ws.cell(row=row, column=2, value=table['name'])
+                        ws.cell(row=row, column=3, value=column['name'])
+                        ws.cell(row=row, column=4, value=column['type'])
+                        ws.cell(row=row, column=5, value=column['comment'])
+                        row += 1
+                
+                # 保存到字节流
+                excel_buffer = io.BytesIO()
+                wb.save(excel_buffer)
+                excel_content = excel_buffer.getvalue()
+                excel_buffer.close()
+                
+                return {
+                    'content_type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    'content': excel_content
+                }
+                
+            except Exception as e:
+                # 如果Excel生成失败，回退到JSON格式
+                return {
+                    'content_type': 'application/json',
+                    'content': json.dumps(sample_data, ensure_ascii=False, indent=2)
+                }
         else:
             return {
                 'content_type': 'application/json',

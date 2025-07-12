@@ -58,7 +58,7 @@ onMounted(() => {
             <div class="feature-content">
               <el-icon size="48" color="#409eff"><Edit /></el-icon>
               <h3>SQL编辑器</h3>
-              <p>支持语法高亮、自动补全的SQL编辑器，实时解析血缘关系</p>
+              <p>智能SQL编辑器，支持语法高亮、自动补全和实时血缘分析</p>
             </div>
           </el-card>
         </el-col>
@@ -68,7 +68,7 @@ onMounted(() => {
             <div class="feature-content">
               <el-icon size="48" color="#67c23a"><Share /></el-icon>
               <h3>血缘可视化</h3>
-              <p>直观的血缘关系图谱，支持多层级影响分析</p>
+              <p>直观的血缘关系图谱，支持多层级影响分析和图形导出</p>
             </div>
           </el-card>
         </el-col>
@@ -78,7 +78,7 @@ onMounted(() => {
             <div class="feature-content">
               <el-icon size="48" color="#e6a23c"><DataBoard /></el-icon>
               <h3>元数据管理</h3>
-              <p>Hive表结构信息管理，支持搜索和业务映射</p>
+              <p>Hive表结构管理，支持搜索、导入和业务映射功能</p>
             </div>
           </el-card>
         </el-col>
@@ -88,7 +88,7 @@ onMounted(() => {
             <div class="feature-content">
               <el-icon size="48" color="#f56c6c"><Folder /></el-icon>
               <h3>Git集成</h3>
-              <p>Git仓库管理，批量分析SQL脚本血缘关系</p>
+              <p>Git仓库管理，支持多种认证方式和批量SQL分析</p>
             </div>
           </el-card>
         </el-col>
@@ -184,6 +184,9 @@ onMounted(() => {
 .feature-card {
   cursor: pointer;
   transition: transform 0.3s ease;
+  height: 220px; /* 固定卡片高度 */
+  display: flex;
+  flex-direction: column;
 }
 
 .feature-card:hover {
@@ -193,18 +196,34 @@ onMounted(() => {
 .feature-content {
   text-align: center;
   padding: 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .feature-content h3 {
   margin: 16px 0 12px 0;
   color: #303133;
   font-size: 18px;
+  flex-shrink: 0; /* 防止标题被压缩 */
 }
 
 .feature-content p {
   color: #606266;
   line-height: 1.5;
   font-size: 14px;
+  margin: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  /* 文本省略号处理 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-wrap: break-word;
 }
 
 .stats {
@@ -251,6 +270,10 @@ onMounted(() => {
     margin-bottom: 40px;
   }
   
+  .feature-card {
+    height: 200px; /* 在中等屏幕上稍微降低高度 */
+  }
+  
   .feature-content {
     padding: 15px;
   }
@@ -291,6 +314,24 @@ onMounted(() => {
   
   .features {
     margin-bottom: 30px;
+  }
+  
+  .feature-card {
+    height: 180px; /* 在小屏幕上进一步降低高度 */
+  }
+  
+  .feature-content {
+    padding: 10px;
+  }
+  
+  .feature-content h3 {
+    font-size: 14px;
+    margin: 8px 0;
+  }
+  
+  .feature-content p {
+    font-size: 11px;
+    line-height: 1.4;
   }
   
   :deep(.el-col) {

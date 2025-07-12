@@ -14,49 +14,52 @@
             </div>
           </template>
 
-          <el-table :data="repos" v-loading="loading">
-            <el-table-column prop="name" label="仓库名称" />
-            <el-table-column prop="branch" label="分支" width="100" />
-            <el-table-column label="认证" width="80">
+          <el-table :data="repos" v-loading="loading" class="repo-table">
+            <el-table-column prop="name" label="仓库名称" min-width="120" show-overflow-tooltip>
               <template #default="scope">
-                <el-tag :type="scope.row.auth_type === 'token' ? 'success' : 'info'" size="small">
-                  {{ scope.row.auth_type === 'token' ? 'Token' : '密码' }}
-                </el-tag>
+                <div class="repo-name">{{ scope.row.name }}</div>
               </template>
             </el-table-column>
-            <el-table-column label="模式" width="80">
+            <el-table-column prop="branch" label="分支" width="90" />
+            <el-table-column label="状态" width="120">
               <template #default="scope">
-                <el-tag :type="scope.row.access_mode === 'api' ? 'warning' : 'primary'" size="small">
-                  {{ scope.row.access_mode === 'api' ? 'API' : '克隆' }}
-                </el-tag>
+                <div class="status-tags">
+                  <el-tag :type="scope.row.auth_type === 'token' ? 'success' : 'info'" size="small">
+                    {{ scope.row.auth_type === 'token' ? 'Token' : '密码' }}
+                  </el-tag>
+                  <el-tag :type="scope.row.access_mode === 'api' ? 'warning' : 'primary'" size="small">
+                    {{ scope.row.access_mode === 'api' ? 'API' : '克隆' }}
+                  </el-tag>
+                </div>
               </template>
             </el-table-column>
-            <el-table-column label="状态" width="80">
+            <el-table-column label="最后同步" width="120" show-overflow-tooltip>
               <template #default="scope">
-                <el-tag :type="scope.row.is_active ? 'success' : 'danger'">
-                  {{ scope.row.is_active ? '活跃' : '禁用' }}
-                </el-tag>
+                <div class="sync-time">
+                  {{ scope.row.last_sync ? formatDate(scope.row.last_sync) : '未同步' }}
+                </div>
               </template>
             </el-table-column>
-            <el-table-column label="最后同步" width="180">
+            <el-table-column label="操作" width="160">
               <template #default="scope">
-                {{ scope.row.last_sync ? formatDate(scope.row.last_sync) : '未同步' }}
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="280">
-              <template #default="scope">
-                <el-button size="small" @click="syncRepo(scope.row)" :loading="syncingRepos.has(scope.row.id)">
-                  同步
-                </el-button>
-                <el-button size="small" @click="showBranchDialog(scope.row)" type="success">
-                  分支
-                </el-button>
-                <el-button size="small" @click="parseRepo(scope.row)" :loading="parsingRepos.has(scope.row.id)">
-                  解析血缘
-                </el-button>
-                <el-button size="small" type="danger" @click="deleteRepo(scope.row)" :loading="deletingRepos.has(scope.row.id)">
-                  删除
-                </el-button>
+                <div class="action-buttons">
+                  <div class="button-row">
+                    <el-button size="small" @click="syncRepo(scope.row)" :loading="syncingRepos.has(scope.row.id)">
+                      同步
+                    </el-button>
+                    <el-button size="small" @click="showBranchDialog(scope.row)" type="success">
+                      分支
+                    </el-button>
+                  </div>
+                  <div class="button-row">
+                    <el-button size="small" @click="parseRepo(scope.row)" :loading="parsingRepos.has(scope.row.id)">
+                      解析
+                    </el-button>
+                    <el-button size="small" type="danger" @click="deleteRepo(scope.row)" :loading="deletingRepos.has(scope.row.id)">
+                      删除
+                    </el-button>
+                  </div>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -76,30 +79,34 @@
             </div>
           </template>
 
-          <el-table :data="jobs" v-loading="jobsLoading">
-            <el-table-column prop="git_repo_name" label="仓库" />
-            <el-table-column label="状态" width="100">
+          <el-table :data="jobs" v-loading="jobsLoading" class="jobs-table">
+            <el-table-column prop="git_repo_name" label="仓库" min-width="120" show-overflow-tooltip />
+            <el-table-column label="状态" width="80">
               <template #default="scope">
-                <el-tag :type="getJobStatusType(scope.row.status)">
+                <el-tag :type="getJobStatusType(scope.row.status)" size="small">
                   {{ getJobStatusText(scope.row.status) }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="进度" width="150">
+            <el-table-column label="进度" width="140">
               <template #default="scope">
-                <el-progress 
-                  :percentage="scope.row.progress_percentage" 
-                  :status="scope.row.status === 'failed' ? 'exception' : undefined"
-                  size="small"
-                />
-                <div style="font-size: 12px; color: #666;">
-                  {{ scope.row.processed_files }}/{{ scope.row.total_files }}
+                <div class="progress-container">
+                  <el-progress 
+                    :percentage="scope.row.progress_percentage" 
+                    :status="scope.row.status === 'failed' ? 'exception' : undefined"
+                    size="small"
+                  />
+                  <div class="progress-text">
+                    {{ scope.row.processed_files }}/{{ scope.row.total_files }}
+                  </div>
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="created_at" label="创建时间" width="150">
+            <el-table-column prop="created_at" label="创建时间" width="120" show-overflow-tooltip>
               <template #default="scope">
-                {{ formatDate(scope.row.created_at) }}
+                <div class="create-time">
+                  {{ formatDate(scope.row.created_at) }}
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -474,6 +481,88 @@ onMounted(() => {
   overflow: auto;
 }
 
+/* 仓库表格样式 */
+.repo-table {
+  min-height: 400px;
+}
+
+.repo-name {
+  font-weight: 500;
+  color: #303133;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-tags {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sync-time {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.button-row {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.button-row .el-button {
+  padding: 4px 8px;
+  min-width: 60px;
+}
+
+/* 解析任务表格样式 */
+.jobs-table {
+  min-height: 400px;
+}
+
+.progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.progress-text {
+  font-size: 12px;
+  color: #666;
+  text-align: center;
+}
+
+.create-time {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 确保两个卡片高度一致 */
+.el-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -502,6 +591,26 @@ onMounted(() => {
   .card-header {
     flex-direction: column;
     align-items: stretch;
+  }
+  
+  /* 调整表格在中等屏幕的显示 */
+  .button-row {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .button-row .el-button {
+    min-width: 50px;
+    padding: 2px 6px;
+  }
+  
+  .status-tags {
+    gap: 2px;
+  }
+  
+  .repo-table,
+  .jobs-table {
+    min-height: 300px;
   }
   
   :deep(.el-table) {

@@ -166,13 +166,22 @@ class MetadataImportViewSet(viewsets.ViewSet):
         import_service = MetadataImportService()
         template = import_service.get_import_template(format_type)
         
+        # 设置正确的文件扩展名
+        if format_type == 'excel':
+            filename = "metadata_template.xlsx"
+        elif format_type == 'csv':
+            filename = "metadata_template.csv"
+        else:
+            filename = "metadata_template.json"
+        
         response = HttpResponse(
             template['content'],
             content_type=template['content_type']
         )
         
-        filename = f"metadata_template.{format_type}"
+        # 设置下载头部
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response['Access-Control-Expose-Headers'] = 'Content-Disposition'
         
         return response
 

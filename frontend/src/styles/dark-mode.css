@@ -1,0 +1,189 @@
+/* 深色模式全局样式 */
+
+/* Element Plus 深色模式支持 */
+html.dark {
+  color-scheme: dark;
+}
+
+/* 覆盖 Element Plus 组件的深色模式样式 */
+html.dark .el-card {
+  background-color: #2d3748 !important;
+  border-color: #4a5568 !important;
+  color: #e2e8f0 !important;
+}
+
+html.dark .el-card__header {
+  border-color: #4a5568 !important;
+  background-color: #1a202c !important;
+  color: #e2e8f0 !important;
+}
+
+html.dark .el-table {
+  background-color: #2d3748 !important;
+  color: #e2e8f0 !important;
+}
+
+html.dark .el-table th.el-table__cell {
+  background-color: #1a202c !important;
+  color: #e2e8f0 !important;
+  border-color: #4a5568 !important;
+}
+
+html.dark .el-table td.el-table__cell {
+  background-color: #2d3748 !important;
+  border-color: #4a5568 !important;
+  color: #e2e8f0 !important;
+}
+
+html.dark .el-table tr:hover > td {
+  background-color: #374151 !important;
+}
+
+html.dark .el-form-item__label {
+  color: #e2e8f0 !important;
+}
+
+html.dark .el-input__wrapper {
+  background-color: #374151 !important;
+  border-color: #4a5568 !important;
+  color: #e2e8f0 !important;
+}
+
+html.dark .el-input__inner {
+  background-color: transparent !important;
+  color: #e2e8f0 !important;
+}
+
+html.dark .el-textarea__inner {
+  background-color: #374151 !important;
+  border-color: #4a5568 !important;
+  color: #e2e8f0 !important;
+}
+
+html.dark .el-select .el-input .el-select__caret {
+  color: #e2e8f0 !important;
+}
+
+html.dark .el-button {
+  border-color: #4a5568 !important;
+  color: #e2e8f0 !important;
+}
+
+html.dark .el-button.is-plain {
+  background-color: transparent !important;
+  border-color: #4a5568 !important;
+}
+
+html.dark .el-button:hover {
+  background-color: #374151 !important;
+  border-color: #6b7280 !important;
+}
+
+html.dark .el-dialog {
+  background-color: #2d3748 !important;
+  border-color: #4a5568 !important;
+}
+
+html.dark .el-dialog__header {
+  background-color: #1a202c !important;
+  color: #e2e8f0 !important;
+  border-color: #4a5568 !important;
+}
+
+html.dark .el-dialog__body {
+  background-color: #2d3748 !important;
+  color: #e2e8f0 !important;
+}
+
+html.dark .el-upload {
+  border-color: #4a5568 !important;
+}
+
+html.dark .el-upload__tip {
+  color: #a0aec0 !important;
+}
+
+html.dark .el-progress__text {
+  color: #e2e8f0 !important;
+}
+
+html.dark .el-statistic {
+  color: #e2e8f0 !important;
+}
+
+html.dark .el-statistic__head {
+  color: #a0aec0 !important;
+}
+
+html.dark .el-statistic__content {
+  color: #e2e8f0 !important;
+}
+
+html.dark .el-descriptions {
+  color: #e2e8f0 !important;
+}
+
+html.dark .el-descriptions__label {
+  color: #a0aec0 !important;
+}
+
+html.dark .el-descriptions__content {
+  color: #e2e8f0 !important;
+}
+
+html.dark .el-descriptions__cell {
+  border-color: #4a5568 !important;
+}
+
+html.dark .el-alert {
+  background-color: #374151 !important;
+  border-color: #4a5568 !important;
+}
+
+html.dark .el-alert__title {
+  color: #e2e8f0 !important;
+}
+
+html.dark .el-alert__description {
+  color: #a0aec0 !important;
+}
+
+html.dark .el-result__title {
+  color: #e2e8f0 !important;
+}
+
+html.dark .el-result__subtitle {
+  color: #a0aec0 !important;
+}
+
+/* Monaco Editor 深色模式 */
+html.dark .monaco-editor {
+  background-color: #1a202c !important;
+}
+
+/* 自定义组件深色模式 */
+html.dark .feature-content h3 {
+  color: #e2e8f0 !important;
+}
+
+html.dark .feature-content p {
+  color: #a0aec0 !important;
+}
+
+/* SVG 图形深色模式 */
+html.dark svg {
+  background-color: #2d3748 !important;
+}
+
+html.dark svg text {
+  fill: #e2e8f0 !important;
+}
+
+html.dark svg rect {
+  fill: #374151 !important;
+  stroke: #4a5568 !important;
+}
+
+html.dark svg path {
+  stroke: #e2e8f0 !important;
+}

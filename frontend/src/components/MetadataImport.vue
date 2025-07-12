@@ -205,19 +205,31 @@ const downloadTemplate = async () => {
   try {
     const response = await metadataAPI.getImportTemplate(importForm.fileFormat)
     
+    // 根据格式设置正确的文件名和扩展名
+    let filename = 'metadata_template.json'
+    if (importForm.fileFormat === 'excel') {
+      filename = 'metadata_template.xlsx'
+    } else if (importForm.fileFormat === 'csv') {
+      filename = 'metadata_template.csv'
+    } else if (importForm.fileFormat === 'json') {
+      filename = 'metadata_template.json'
+    }
+    
     // 创建下载链接
     const blob = new Blob([response.data])
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `metadata_template.${importForm.fileFormat}`
+    link.download = filename
+    document.body.appendChild(link) // 添加到DOM以确保兼容性
     link.click()
+    document.body.removeChild(link) // 清理DOM
     window.URL.revokeObjectURL(url)
     
-    ElMessage.success('模板下载成功')
+    ElMessage.success(`${importForm.fileFormat.toUpperCase()}模板下载成功`)
   } catch (error) {
     console.error('下载模板失败:', error)
-    ElMessage.error('下载模板失败')
+    ElMessage.error('模板下载失败，请检查网络连接')
   }
 }
 

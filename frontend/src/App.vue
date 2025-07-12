@@ -3,11 +3,39 @@ import { RouterView } from 'vue-router'
 import { ref, onMounted, onUnmounted } from 'vue'
 import { 
   House, Edit, Share, DataBoard, Folder, 
-  Menu as MenuIcon, Close 
+  Menu as MenuIcon, Close, Moon, Sunny 
 } from '@element-plus/icons-vue'
 
 const isMobile = ref(false)
 const mobileMenuVisible = ref(false)
+const isDark = ref(false)
+
+// 主题切换功能
+const toggleTheme = () => {
+  isDark.value = !isDark.value
+  const htmlElement = document.documentElement
+  
+  if (isDark.value) {
+    htmlElement.classList.add('dark')
+  } else {
+    htmlElement.classList.remove('dark')
+  }
+  
+  // 保存主题偏好到localStorage
+  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
+}
+
+// 初始化主题
+const initTheme = () => {
+  const savedTheme = localStorage.getItem('theme')
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+  
+  isDark.value = savedTheme ? savedTheme === 'dark' : prefersDark
+  
+  if (isDark.value) {
+    document.documentElement.classList.add('dark')
+  }
+}
 
 const checkScreenSize = () => {
   isMobile.value = window.innerWidth <= 768
@@ -21,6 +49,7 @@ const toggleMobileMenu = () => {
 }
 
 onMounted(() => {
+  initTheme()
   checkScreenSize()
   window.addEventListener('resize', checkScreenSize)
 })
@@ -72,6 +101,18 @@ onUnmounted(() => {
             </el-menu-item>
           </el-menu>
           
+          <!-- 桌面端主题切换按钮 -->
+          <div v-if="!isMobile" class="theme-controls">
+            <el-button
+              type="primary"
+              :icon="isDark ? Sunny : Moon"
+              @click="toggleTheme"
+              circle
+              size="default"
+              plain
+            />
+          </div>
+          
           <!-- 移动端菜单按钮 -->
           <el-button 
             v-if="isMobile"
@@ -118,6 +159,20 @@ onUnmounted(() => {
             <el-icon><Folder /></el-icon>
             <span>Git仓库</span>
           </el-menu-item>
+          
+          <!-- 移动端主题切换 -->
+          <div class="mobile-theme-toggle">
+            <el-button
+              type="primary"
+              :icon="isDark ? Sunny : Moon"
+              @click="toggleTheme"
+              size="default"
+              plain
+              style="width: 100%; margin-top: 10px;"
+            >
+              {{ isDark ? '浅色模式' : '深色模式' }}
+            </el-button>
+          </div>
         </el-menu>
       </el-drawer>
       
@@ -129,11 +184,28 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+/* 深色模式变量 */
+:root {
+  --bg-color: #ffffff;
+  --text-color: #303133;
+  --border-color: #dcdfe6;
+  --header-bg: #409eff;
+}
+
+html.dark {
+  --bg-color: #1a1a1a;
+  --text-color: #e5eaf3;
+  --border-color: #363636;
+  --header-bg: #1f2937;
+}
+
 .app {
   height: 100vh;
   width: 100vw;
   display: flex;
   flex-direction: column;
+  background-color: var(--bg-color);
+  color: var(--text-color);
 }
 
 .header {
@@ -165,6 +237,15 @@ onUnmounted(() => {
   display: none;
 }
 
+.theme-controls {
+  margin-left: auto;
+  margin-right: 20px;
+}
+
+.mobile-theme-toggle {
+  padding: 0 20px;
+}
+
 .main-content {
   flex: 1;
   overflow: auto;
@@ -179,7 +260,7 @@ onUnmounted(() => {
 
 :deep(.el-header) {
   padding: 0 20px;
-  background-color: #409eff;
+  background-color: var(--header-bg);
   height: 60px !important;
   line-height: 60px;
   flex-shrink: 0;
@@ -187,8 +268,23 @@ onUnmounted(() => {
 
 :deep(.el-main) {
   padding: 0;
-  background-color: #f5f7fa;
+  background-color: var(--bg-color);
   overflow: auto;
+}
+
+/* 深色模式下的Element Plus组件样式调整 */
+html.dark {
+  :deep(.el-main) {
+    background-color: #1a1a1a;
+  }
+  
+  :deep(.el-menu--horizontal) {
+    background-color: transparent !important;
+  }
+  
+  :deep(.el-drawer__body) {
+    background-color: #1a1a1a;
+  }
 }
 
 :deep(.el-menu.el-menu--horizontal) {
