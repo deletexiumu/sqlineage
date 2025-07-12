@@ -116,37 +116,65 @@ REM 数据库初始化
 REM ────────────────────────────────────────────────────────────
 echo 🗄️  检查并初始化数据库...
 
-if exist manage.py (
-    if not exist db.sqlite3 (
-        echo 📄 数据库文件不存在，创建新数据库...
+if not exist manage.py (
+    echo ❌ manage.py 文件不存在，请确认在正确的项目目录下运行
+    pause
+    exit /b 1
+)
+
+if not exist db.sqlite3 (
+    echo 📄 数据库文件不存在，创建新数据库...
+    echo   - 生成迁移文件...
+    python manage.py makemigrations apps_core apps_metadata apps_git apps_lineage
+    if errorlevel 1 (
+        echo ❌ 迁移文件生成失败
+        pause
+        exit /b 1
+    )
+    echo   - 执行数据库迁移...
+    python manage.py migrate
+    if errorlevel 1 (
+        echo ❌ 数据库创建失败
+        pause
+        exit /b 1
+    )
+    echo ✅ 数据库创建完成
+) else (
+    echo 📄 数据库文件已存在，检查迁移状态...
+    
+    set migration_needed=false
+    
+    REM 检查是否有新的迁移需要创建
+    python manage.py makemigrations --check --dry-run >nul 2>&1
+    if errorlevel 1 (
+        echo   - 检测到模型更改，生成新的迁移文件...
         python manage.py makemigrations
+        set migration_needed=true
+    )
+    
+    REM 检查是否有未应用的迁移
+    python manage.py showmigrations --list | findstr /C:"[ ]" >nul
+    if not errorlevel 1 (
+        echo   - 检测到未应用的迁移，需要执行迁移...
+        set migration_needed=true
+    )
+    
+    if "%migration_needed%"=="true" (
         python manage.py migrate
         if errorlevel 1 (
-            echo ❌ 数据库创建失败
+            echo ❌ 数据库迁移失败
             pause
             exit /b 1
         )
-        echo ✅ 数据库创建完成
+        echo ✅ 数据库迁移完成
     ) else (
-        echo 📄 数据库文件已存在，检查迁移状态...
-        python manage.py makemigrations --check --dry-run >nul 2>&1
-        if errorlevel 1 (
-            echo ⚠️  检测到未迁移的更改，执行迁移...
-            python manage.py makemigrations
-            python manage.py migrate
-            if errorlevel 1 (
-                echo ❌ 数据库迁移失败
-                pause
-                exit /b 1
-            )
-            echo ✅ 数据库迁移完成
-        ) else (
-            echo ✅ 数据库状态正常，无需迁移
-        )
+        echo ✅ 数据库状态正常，无需迁移
     )
-) else (
-    echo ⚠️  manage.py 文件不存在，跳过数据库初始化
 )
+
+REM 创建认证Token表
+echo 🔑 确保认证Token表存在...
+python -c "from django.contrib.auth.models import User; from rest_framework.authtoken.models import Token; [Token.objects.get_or_create(user=user) for user in User.objects.all()]; print('✅ Token表检查完成')" 2>nul || echo   - Token表将在首次登录时自动创建
 
 REM ────────────────────────────────────────────────────────────
 REM 可选：创建超级用户

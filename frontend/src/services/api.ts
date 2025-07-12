@@ -117,6 +117,42 @@ export const metadataAPI = {
   
   createBusinessMapping: (data: any) =>
     api.post('/metadata/business-mappings/', data),
+  
+  // 元数据导入
+  importMetadata: (formData: FormData) =>
+    api.post('/metadata/import/import_metadata/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    }),
+  
+  previewImport: (formData: FormData) =>
+    api.post('/metadata/import/import_metadata/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    }),
+  
+  getImportTemplate: (format: string) =>
+    api.get(`/metadata/import/get_template/?format=${format}`, {
+      responseType: 'blob'
+    }),
+  
+  // Hive连接管理
+  testHiveConnection: (config: any) =>
+    api.post('/metadata/hive-connection/test_connection/', config),
+  
+  getHiveDatabases: (config: any) =>
+    api.post('/metadata/hive-connection/get_databases/', config),
+  
+  getHiveTables: (config: any, database: string) =>
+    api.post('/metadata/hive-connection/get_tables/', { ...config, database }),
+  
+  getHiveDatabaseTree: (config: any) =>
+    api.post('/metadata/hive-connection/get_database_tree/', config),
+  
+  selectiveHiveSync: (data: any) =>
+    api.post('/metadata/hive-connection/selective_sync/', data),
 }
 
 // Git API

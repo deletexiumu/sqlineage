@@ -8,6 +8,8 @@ HiicHiveIDE 是一个专为内部团队使用的轻量级数据血缘分析工�
 
 - 🔍 **智能血缘分析**: 实时解析 Hive SQL 语句，自动提取表级和字段级血缘关系
 - 📊 **元数据管理**: 自动爬取并管理 Hive 表和列信息，提供实时统计数据
+- 📁 **手动导入功能**: 支持JSON/CSV/Excel格式元数据文件导入，数据验证和预览
+- 🔗 **选择性Hive连接**: 可视化选择需要同步的表，避免导入无用数据
 - 🔧 **Git 集成增强**: 
   - 支持 GitLab/GitHub，内网私有仓库
   - Token认证和用户名密码双重认证方式
@@ -211,6 +213,26 @@ python manage.py crawl_metadata
 5. 智能分支管理和手动分支选择
 6. 一键删除仓库和本地文件
 
+### 3. 元数据管理增强
+
+**手动导入元数据**
+1. 在元数据管理页面选择"手动导入"功能
+2. 支持三种文件格式：
+   - **JSON格式**: 结构化表和字段定义
+   - **CSV格式**: 表格式的元数据信息
+   - **Excel格式**: .xlsx或.xls文件
+3. 数据验证和预览功能，确保导入数据正确性
+4. 支持合并模式和跳过模式
+5. 可下载标准模板文件
+
+**选择性Hive连接**
+1. 配置Hive连接参数（服务器、端口、认证方式）
+2. 测试连接并获取数据库结构
+3. 可视化树形选择器选择需要同步的表
+4. 支持批量选择和取消选择
+5. 灵活的同步模式：仅添加新表、更新已存在表、完全同步
+6. 实时同步进度和错误反馈
+
 **认证方式**
 - **用户名密码认证**: 传统的Git认证方式
 - **Token认证**: 使用Personal Access Token，推荐用于GitLab
@@ -247,6 +269,26 @@ python manage.py crawl_metadata
 - `GET /api/git/repos/{id}/branches/` - 获取分支列表（支持双模式）
 - `POST /api/git/repos/{id}/switch_branch/` - 切换分支
 - `GET /api/git/repos/{id}/files/` - 获取 SQL 文件列表（支持双模式）
+
+#### 元数据管理 API
+```
+GET /api/metadata/tables/                    # 表列表
+GET /api/metadata/tables/databases/          # 数据库列表  
+GET /api/metadata/tables/autocomplete/       # 自动补全
+GET /api/metadata/tables/statistics/         # 统计数据
+POST /api/metadata/business-mappings/        # 创建业务映射
+
+# 手动导入API
+POST /api/metadata/import/import_metadata/   # 导入元数据
+GET /api/metadata/import/get_template/       # 获取模板文件
+
+# Hive连接API
+POST /api/metadata/hive-connection/test_connection/      # 测试连接
+POST /api/metadata/hive-connection/get_databases/       # 获取数据库列表
+POST /api/metadata/hive-connection/get_tables/          # 获取表列表
+POST /api/metadata/hive-connection/get_database_tree/   # 获取数据库树结构
+POST /api/metadata/hive-connection/selective_sync/      # 选择性同步
+```
 
 ### 3. 血缘分析
 
@@ -474,6 +516,18 @@ npm run dev
    - **Linux服务器**: 推荐本地克隆模式
    - **空间受限**: 使用API模式节省磁盘空间
    - **网络不稳定**: 使用克隆模式支持离线工作
+
+4. **元数据导入优化**
+   - **文件大小**: 限制在10MB以内
+   - **数据验证**: 使用预览功能确认数据正确性
+   - **导入模式**: 根据需求选择合并或跳过模式
+   - **错误处理**: 查看详细错误信息，修正数据格式
+
+5. **Hive连接优化**
+   - **连接测试**: 先测试连接再进行批量操作
+   - **选择策略**: 避免选择过多表，防止同步时间过长
+   - **网络稳定性**: 确保网络连接稳定，避免同步中断
+   - **Mock模式**: 开发环境可使用Mock模式测试功能
 
 ## 许可证
 

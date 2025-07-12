@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('apps_git', '0001_initial'),
+        ('apps_git', '0003_gitrepo_auth_type'),
     ]
 
     operations = [

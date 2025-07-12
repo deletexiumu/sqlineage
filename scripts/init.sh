@@ -94,25 +94,58 @@ popd >/dev/null
 # ────────────────────────────────────────────────────────────
 echo "🗄️  检查并初始化数据库..."
 
+# 确保Django项目存在
+if [ ! -f "manage.py" ]; then
+    echo "❌ manage.py 文件不存在，请确认在正确的项目目录下运行"
+    exit 1
+fi
+
 # 检查数据库文件是否存在
 if [ ! -f "db.sqlite3" ]; then
     echo "📄 数据库文件不存在，创建新数据库..."
-    # 执行数据库迁移
-    "$PY_BIN" manage.py makemigrations
+    # 首先检查是否有未创建的迁移文件
+    echo "  - 生成迁移文件..."
+    "$PY_BIN" manage.py makemigrations apps_core apps_metadata apps_git apps_lineage
+    echo "  - 执行数据库迁移..."
     "$PY_BIN" manage.py migrate
     echo "✅ 数据库创建完成"
 else
     echo "📄 数据库文件已存在，检查迁移状态..."
-    # 检查是否有待迁移的内容
-    if "$PY_BIN" manage.py makemigrations --check --dry-run >/dev/null 2>&1; then
-        echo "⚠️  检测到未迁移的更改，执行迁移..."
+    
+    # 检查各个应用的迁移状态
+    migration_needed=false
+    
+    # 检查是否有新的迁移需要创建
+    if ! "$PY_BIN" manage.py makemigrations --check --dry-run >/dev/null 2>&1; then
+        echo "  - 检测到模型更改，生成新的迁移文件..."
         "$PY_BIN" manage.py makemigrations
+        migration_needed=true
+    fi
+    
+    # 检查是否有未应用的迁移
+    if [ "$("$PY_BIN" manage.py showmigrations --list | grep '\[ \]' | wc -l)" -gt 0 ]; then
+        echo "  - 检测到未应用的迁移，执行迁移..."
+        migration_needed=true
+    fi
+    
+    if [ "$migration_needed" = true ]; then
         "$PY_BIN" manage.py migrate
         echo "✅ 数据库迁移完成"
     else
         echo "✅ 数据库状态正常，无需迁移"
     fi
 fi
+
+# 创建认证Token表（如果不存在）
+echo "🔑 确保认证Token表存在..."
+"$PY_BIN" manage.py shell -c "
+from django.contrib.auth.models import User
+from rest_framework.authtoken.models import Token
+# 为所有用户创建Token（如果不存在）
+for user in User.objects.all():
+    Token.objects.get_or_create(user=user)
+print('✅ Token表检查完成')
+" 2>/dev/null || echo "  - Token表将在首次登录时自动创建"
 
 # ────────────────────────────────────────────────────────────
 # 可选：创建超级用户

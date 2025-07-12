@@ -1,9 +1,43 @@
 <template>
   <div class="metadata-view">
-    <el-card>
+    <!-- 功能导航卡片 -->
+    <el-card class="function-nav">
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <el-card shadow="hover" class="function-card" @click="activeTab = 'metadata'">
+            <div class="function-content">
+              <el-icon size="24"><Grid /></el-icon>
+              <h3>元数据浏览</h3>
+              <p>查看和管理数据库表信息</p>
+            </div>
+          </el-card>
+        </el-col>
+        <el-col :span="8">
+          <el-card shadow="hover" class="function-card" @click="activeTab = 'import'">
+            <div class="function-content">
+              <el-icon size="24"><Upload /></el-icon>
+              <h3>手动导入</h3>
+              <p>从文件导入元数据信息</p>
+            </div>
+          </el-card>
+        </el-col>
+        <el-col :span="8">
+          <el-card shadow="hover" class="function-card" @click="activeTab = 'hive'">
+            <div class="function-content">
+              <el-icon size="24"><Connection /></el-icon>
+              <h3>Hive连接</h3>
+              <p>连接Hive并选择性同步表</p>
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
+    </el-card>
+
+    <!-- 元数据管理标签页 -->
+    <el-card v-show="activeTab === 'metadata'">
       <template #header>
         <div class="card-header">
-          <span>元数据管理</span>
+          <span>元数据浏览</span>
           <div class="header-actions">
             <el-select v-model="selectedDatabase" placeholder="选择数据库" @change="loadTables" clearable>
               <el-option v-for="db in databases" :key="db" :label="db" :value="db" />
@@ -67,6 +101,16 @@
         style="margin-top: 20px; text-align: center"
       />
     </el-card>
+
+    <!-- 手动导入标签页 -->
+    <div v-show="activeTab === 'import'">
+      <MetadataImport />
+    </div>
+
+    <!-- Hive连接标签页 -->
+    <div v-show="activeTab === 'hive'">
+      <HiveConnection />
+    </div>
   </div>
 </template>
 
@@ -75,10 +119,13 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { metadataAPI, type HiveTable } from '@/services/api'
 import { ElMessage } from 'element-plus'
-import { Search, Refresh } from '@element-plus/icons-vue'
+import { Search, Refresh, Grid, Upload, Connection } from '@element-plus/icons-vue'
+import MetadataImport from '../components/MetadataImport.vue'
+import HiveConnection from '../components/HiveConnection.vue'
 
 const router = useRouter()
 
+const activeTab = ref('metadata')
 const loading = ref(false)
 const tables = ref<HiveTable[]>([])
 const databases = ref<string[]>([])
@@ -159,6 +206,38 @@ onMounted(() => {
   padding: 20px;
   height: 100%;
   overflow: auto;
+}
+
+.function-nav {
+  margin-bottom: 20px;
+}
+
+.function-card {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  height: 120px;
+}
+
+.function-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.function-content {
+  text-align: center;
+  padding: 10px;
+}
+
+.function-content h3 {
+  margin: 10px 0 5px 0;
+  color: #303133;
+  font-size: 16px;
+}
+
+.function-content p {
+  margin: 0;
+  color: #909399;
+  font-size: 12px;
 }
 
 .card-header {

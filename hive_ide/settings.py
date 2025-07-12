@@ -161,6 +161,9 @@ HIVE_CONFIG = {
     'kerberos_service_name': 'hive',
 }
 
+# Hive Mock Mode (用于开发和测试)
+HIVE_MOCK_MODE = True
+
 # SQL Lineage Service Configuration
 SQLFLOW_CONFIG = {
     'url': 'http://localhost:19600/sqlflow/datalineage',
