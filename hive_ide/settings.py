@@ -169,4 +169,8 @@ SQLFLOW_CONFIG = {
 }
 
 # Git Encryption Key (Generated for demo purposes)
-GIT_ENCRYPTION_KEY = 'fernet_key_would_be_generated_here_in_production'
+# 生成有效的Fernet密钥 - 32字节base64编码
+import base64
+import os
+_key = base64.urlsafe_b64encode(os.urandom(32))
+GIT_ENCRYPTION_KEY = _key.decode()

@@ -45,6 +45,21 @@ class GitRepoViewSet(viewsets.ModelViewSet):
                 defaults={'email': 'default@example.com'}
             )
             serializer.save(user=default_user)
+    
+    def create(self, request, *args, **kwargs):
+        """重写create方法以提供更好的错误处理"""
+        try:
+            return super().create(request, *args, **kwargs)
+        except Exception as e:
+            # 记录详细错误信息
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"GitRepo creation error: {str(e)}")
+            
+            return Response({
+                'error': '创建Git仓库配置失败',
+                'details': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'])
     def sync(self, request, pk=None):

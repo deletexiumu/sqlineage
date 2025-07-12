@@ -29,11 +29,23 @@ class GitRepo(models.Model):
     def _get_encryption_key(self):
         key = getattr(settings, 'GIT_ENCRYPTION_KEY', None)
         if not key:
+            # 生成新的密钥
             key = Fernet.generate_key()
             print(f"Generated new encryption key: {key.decode()}")
             print("Add this to your settings.py: GIT_ENCRYPTION_KEY = '{}'".format(key.decode()))
+        
         if isinstance(key, str):
             key = key.encode()
+        
+        # 验证密钥格式
+        try:
+            Fernet(key)  # 测试密钥是否有效
+        except Exception as e:
+            # 如果密钥无效，生成新的
+            print(f"Invalid encryption key: {e}")
+            key = Fernet.generate_key()
+            print(f"Generated new encryption key: {key.decode()}")
+            
         return key
 
     def set_password(self, password):
