@@ -6,6 +6,7 @@ import urllib3
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 from .models import GitRepo
+from .gitlab_api_service import GitLabAPIService
 from django.utils import timezone
 
 # 禁用urllib3的SSL警告
@@ -99,6 +100,35 @@ class GitService:
                     
         except Exception as e:
             logger.debug(f"Credential cleanup failed: {str(e)}")
+    
+    def _ensure_directory_permissions(self, path):
+        """确保目录具有正确的权限，特别是Windows环境"""
+        try:
+            import platform
+            import stat
+            
+            if platform.system() == 'Windows':
+                # Windows下处理文件权限问题
+                for root, dirs, files in os.walk(path):
+                    # 设置目录权限
+                    try:
+                        os.chmod(root, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+                    except PermissionError:
+                        pass  # 忽略权限错误，继续处理
+                    
+                    # 设置文件权限
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        try:
+                            os.chmod(file_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+                        except PermissionError:
+                            pass  # 忽略权限错误，继续处理
+                            
+            logger.debug(f"Ensured directory permissions for {path}")
+            
+        except Exception as e:
+            logger.debug(f"Permission setup failed for {path}: {str(e)}")
+            # 权限设置失败不应该中断主流程
 
     def clone_or_pull(self):
         local_path = self.git_repo.repo_local_path
@@ -126,6 +156,8 @@ class GitService:
         try:
             if os.path.exists(local_path):
                 try:
+                    # Windows权限处理
+                    self._ensure_directory_permissions(local_path)
                     self.repo = git.Repo(local_path)
                     origin = self.repo.remotes.origin
                     logger.info(f"Pulling latest changes for {self.git_repo.name}")
@@ -303,6 +335,47 @@ class GitService:
             raise Exception(f"仓库同步失败: {str(e)}")
 
     def get_sql_files(self):
+        """获取SQL文件列表，支持clone和API两种模式"""
+        
+        if self.git_repo.access_mode == 'api':
+            # API模式：直接通过GitLab API获取文件列表
+            return self._get_sql_files_via_api()
+        else:
+            # Clone模式：使用原有的本地克隆方式
+            return self._get_sql_files_via_clone()
+    
+    def _get_sql_files_via_api(self):
+        """通过API方式获取SQL文件列表"""
+        try:
+            api_service = GitLabAPIService(
+                repo_url=self.git_repo.repo_url,
+                token=self.git_repo.get_password(),
+                ssl_verify=self.git_repo.ssl_verify
+            )
+            
+            files = api_service.get_file_tree(branch=self.git_repo.branch)
+            
+            # 转换为统一格式
+            sql_files = []
+            for file in files:
+                sql_files.append({
+                    'path': file['path'],
+                    'full_path': file['path'],  # API模式下full_path就是相对路径
+                    'size': file['size'],
+                    'modified': None,  # API模式下暂不提供修改时间
+                    'api_mode': True
+                })
+            
+            sql_files.sort(key=lambda x: x['path'])
+            logger.info(f"Found {len(sql_files)} SQL files via API for {self.git_repo.name}")
+            return sql_files
+            
+        except Exception as e:
+            logger.error(f"Failed to get SQL files via API from {self.git_repo.name}: {str(e)}")
+            return []
+    
+    def _get_sql_files_via_clone(self):
+        """通过本地克隆方式获取SQL文件列表"""
         if not self.repo or not os.path.exists(self.git_repo.repo_local_path):
             if not self.clone_or_pull():
                 return []
@@ -317,7 +390,8 @@ class GitService:
                         'path': str(relative_path),
                         'full_path': str(sql_file),
                         'size': sql_file.stat().st_size,
-                        'modified': sql_file.stat().st_mtime
+                        'modified': sql_file.stat().st_mtime,
+                        'api_mode': False
                     })
             
             sql_files.sort(key=lambda x: x['path'])
@@ -328,6 +402,36 @@ class GitService:
             return []
 
     def read_file(self, file_path):
+        """读取文件内容，支持clone和API两种模式"""
+        
+        if self.git_repo.access_mode == 'api':
+            # API模式：直接通过GitLab API读取文件内容
+            return self._read_file_via_api(file_path)
+        else:
+            # Clone模式：从本地克隆的文件读取
+            return self._read_file_via_clone(file_path)
+    
+    def _read_file_via_api(self, file_path):
+        """通过API方式读取文件内容"""
+        try:
+            api_service = GitLabAPIService(
+                repo_url=self.git_repo.repo_url,
+                token=self.git_repo.get_password(),
+                ssl_verify=self.git_repo.ssl_verify
+            )
+            
+            content = api_service.get_file_content(file_path, branch=self.git_repo.branch)
+            if content is not None:
+                logger.debug(f"Read file {file_path} via API ({len(content)} chars)")
+            
+            return content
+            
+        except Exception as e:
+            logger.error(f"Failed to read file {file_path} via API from {self.git_repo.name}: {str(e)}")
+            return None
+    
+    def _read_file_via_clone(self, file_path):
+        """通过本地克隆方式读取文件内容"""
         if not self.repo or not os.path.exists(self.git_repo.repo_local_path):
             if not self.clone_or_pull():
                 return None
@@ -398,7 +502,34 @@ class GitService:
             return False
 
     def get_remote_branches(self):
-        """获取远程仓库的分支列表"""
+        """获取远程仓库的分支列表，支持clone和API两种模式"""
+        
+        if self.git_repo.access_mode == 'api':
+            # API模式：直接通过GitLab API获取分支列表
+            return self._get_branches_via_api()
+        else:
+            # Clone模式：使用原有的Git命令方式
+            return self._get_branches_via_clone()
+    
+    def _get_branches_via_api(self):
+        """通过API方式获取分支列表"""
+        try:
+            api_service = GitLabAPIService(
+                repo_url=self.git_repo.repo_url,
+                token=self.git_repo.get_password(),
+                ssl_verify=self.git_repo.ssl_verify
+            )
+            
+            branches = api_service.get_branches()
+            logger.info(f"Found {len(branches)} branches via API for {self.git_repo.name}")
+            return branches
+            
+        except Exception as e:
+            logger.error(f"Failed to get branches via API from {self.git_repo.name}: {str(e)}")
+            return ['main', 'master']  # 返回默认分支
+    
+    def _get_branches_via_clone(self):
+        """通过本地克隆方式获取分支列表"""
         local_path = self.git_repo.repo_local_path
         auth_url = self._get_auth_url()
         

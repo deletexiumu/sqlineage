@@ -54,7 +54,10 @@ export interface GitRepo {
   name: string
   repo_url: string
   username: string
+  auth_type: string
+  access_mode: string
   branch: string
+  ssl_verify: boolean
   is_active: boolean
   created_at: string
   updated_at: string

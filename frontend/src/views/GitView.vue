@@ -24,6 +24,13 @@
                 </el-tag>
               </template>
             </el-table-column>
+            <el-table-column label="模式" width="80">
+              <template #default="scope">
+                <el-tag :type="scope.row.access_mode === 'api' ? 'warning' : 'primary'" size="small">
+                  {{ scope.row.access_mode === 'api' ? 'API' : '克隆' }}
+                </el-tag>
+              </template>
+            </el-table-column>
             <el-table-column label="状态" width="80">
               <template #default="scope">
                 <el-tag :type="scope.row.is_active ? 'success' : 'danger'">
@@ -46,6 +53,9 @@
                 </el-button>
                 <el-button size="small" @click="parseRepo(scope.row)" :loading="parsingRepos.has(scope.row.id)">
                   解析血缘
+                </el-button>
+                <el-button size="small" type="danger" @click="deleteRepo(scope.row)" :loading="deletingRepos.has(scope.row.id)">
+                  删除
                 </el-button>
               </template>
             </el-table-column>
@@ -178,6 +188,17 @@
         <el-form-item label="分支">
           <el-input v-model="newRepo.branch" placeholder="main" />
         </el-form-item>
+        <el-form-item label="访问模式">
+          <el-radio-group v-model="newRepo.access_mode">
+            <el-radio label="clone">本地克隆</el-radio>
+            <el-radio label="api">API访问</el-radio>
+          </el-radio-group>
+          <div style="font-size: 12px; color: #666; margin-top: 5px;">
+            <strong>访问模式说明:</strong><br/>
+            • 本地克隆: 下载完整仓库到本地，支持所有Git操作<br/>
+            • API访问: 仅通过API获取文件，不占用本地磁盘空间，适合Windows权限问题
+          </div>
+        </el-form-item>
         <el-form-item label="SSL验证">
           <el-switch 
             v-model="newRepo.ssl_verify" 
@@ -215,6 +236,7 @@ const repos = ref<GitRepo[]>([])
 const jobs = ref<LineageParseJob[]>([])
 const syncingRepos = ref(new Set<number>())
 const parsingRepos = ref(new Set<number>())
+const deletingRepos = ref(new Set<number>())
 const currentRepo = ref<GitRepo | null>(null)
 const availableBranches = ref<string[]>([])
 const selectedBranch = ref('')
@@ -225,6 +247,7 @@ const newRepo = ref({
   username: '',
   password: '',
   auth_type: 'password',
+  access_mode: 'api',  // 默认推荐API模式
   branch: 'main',
   ssl_verify: true,
 })
@@ -276,7 +299,7 @@ const addRepo = async () => {
     await gitAPI.createRepo(newRepo.value)
     ElMessage.success('仓库添加成功')
     showAddRepo.value = false
-    newRepo.value = { name: '', repo_url: '', username: '', password: '', auth_type: 'password', branch: 'main', ssl_verify: true }
+    newRepo.value = { name: '', repo_url: '', username: '', password: '', auth_type: 'password', access_mode: 'api', branch: 'main', ssl_verify: true }
     await loadRepos()
   } catch (error) {
     console.error('Add repo error:', error)
@@ -338,6 +361,32 @@ const parseRepo = async (repo: GitRepo) => {
   } finally {
     parsingRepos.value.delete(repo.id)
   }
+}
+
+const deleteRepo = async (repo: GitRepo) => {
+  ElMessageBox.confirm(
+    `确定要删除仓库 "${repo.name}" 吗？这将删除本地克隆的所有文件和配置信息。`,
+    '删除仓库',
+    {
+      confirmButtonText: '确定删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    }
+  ).then(async () => {
+    deletingRepos.value.add(repo.id)
+    try {
+      await gitAPI.deleteRepo(repo.id)
+      ElMessage.success('仓库删除成功')
+      await loadRepos()
+    } catch (error) {
+      console.error('Delete repo error:', error)
+      ElMessage.error('删除仓库失败')
+    } finally {
+      deletingRepos.value.delete(repo.id)
+    }
+  }).catch(() => {
+    ElMessage.info('已取消删除')
+  })
 }
 
 const showBranchDialog = async (repo: GitRepo) => {

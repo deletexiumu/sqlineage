@@ -255,3 +255,46 @@ class GitRepoViewSet(viewsets.ModelViewSet):
         commits = git_service.get_commit_history(limit)
         serializer = GitCommitSerializer(commits, many=True)
         return Response(serializer.data)
+    
+    def destroy(self, request, *args, **kwargs):
+        """删除Git仓库配置，同时清理本地文件"""
+        git_repo = self.get_object()
+        
+        try:
+            # 删除本地仓库目录
+            local_path = git_repo.repo_local_path
+            if os.path.exists(local_path):
+                import shutil
+                import platform
+                import stat
+                
+                # Windows下需要特殊处理只读文件
+                if platform.system() == 'Windows':
+                    def remove_readonly_handler(func, path, exc_info):
+                        """处理Windows只读文件删除问题"""
+                        if os.path.exists(path):
+                            os.chmod(path, stat.S_IWRITE)
+                            func(path)
+                    
+                    shutil.rmtree(local_path, onerror=remove_readonly_handler)
+                else:
+                    shutil.rmtree(local_path)
+                    
+                logger.info(f"Removed local repository at {local_path}")
+            
+            # 删除数据库记录
+            repo_name = git_repo.name
+            git_repo.delete()
+            
+            return Response({
+                'status': 'success',
+                'message': f'仓库 {repo_name} 及本地文件已删除'
+            })
+            
+        except Exception as e:
+            logger.error(f"Failed to delete repository {git_repo.name}: {str(e)}")
+            return Response({
+                'status': 'error',
+                'message': '删除仓库失败',
+                'details': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)

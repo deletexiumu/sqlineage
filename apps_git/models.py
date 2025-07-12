@@ -12,6 +12,11 @@ class GitRepo(models.Model):
         ('token', 'Token认证'),
     ]
     
+    ACCESS_MODE_CHOICES = [
+        ('clone', '本地克隆'),
+        ('api', 'API访问'),
+    ]
+    
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     name = models.CharField(max_length=255)
     repo_url = models.URLField()
@@ -19,6 +24,7 @@ class GitRepo(models.Model):
     username = models.CharField(max_length=255)
     encrypted_password = models.TextField()
     auth_type = models.CharField(max_length=10, choices=AUTH_TYPE_CHOICES, default='password', help_text='认证方式：密码或Token')
+    access_mode = models.CharField(max_length=10, choices=ACCESS_MODE_CHOICES, default='clone', help_text='访问模式：本地克隆或API访问')
     branch = models.CharField(max_length=100, default='main')
     ssl_verify = models.BooleanField(default=True, help_text='是否验证SSL证书，内网私有GitLab建议设为False')
     is_active = models.BooleanField(default=True)
@@ -70,7 +76,18 @@ class GitRepo(models.Model):
     @property
     def repo_local_path(self):
         if not self.local_path:
+            import platform
             safe_name = "".join(c for c in self.name if c.isalnum() or c in (' ', '-', '_')).rstrip()
-            self.local_path = os.path.join('/tmp', 'git_repos', str(self.user.id), safe_name)
+            
+            # 跨平台路径处理
+            if platform.system() == 'Windows':
+                # Windows: 使用用户临时目录
+                import tempfile
+                base_dir = os.path.join(tempfile.gettempdir(), 'hiic_git_repos')
+            else:
+                # Unix/Linux/macOS: 使用/tmp目录
+                base_dir = '/tmp/hiic_git_repos'
+            
+            self.local_path = os.path.join(base_dir, str(self.user.id), safe_name)
             self.save()
         return self.local_path
