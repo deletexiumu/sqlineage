@@ -49,13 +49,49 @@ class GitService:
         
         try:
             if os.path.exists(local_path):
-                self.repo = git.Repo(local_path)
-                origin = self.repo.remotes.origin
-                logger.info(f"Pulling latest changes for {self.git_repo.name}")
+                try:
+                    self.repo = git.Repo(local_path)
+                    origin = self.repo.remotes.origin
+                    logger.info(f"Pulling latest changes for {self.git_repo.name}")
+                    
+                    # 检查并设置remote refspec
+                    try:
+                        # 尝试获取remote的refspec配置
+                        origin.refs
+                    except (AttributeError, AssertionError):
+                        # 如果refspec没有正确设置，重新配置
+                        logger.info(f"Setting up remote refspec for {self.git_repo.name}")
+                        self.repo.git.config('remote.origin.fetch', '+refs/heads/*:refs/heads/*')
+                except (git.exc.InvalidGitRepositoryError, git.exc.NoSuchPathError) as repo_error:
+                    # 如果本地仓库损坏，删除并重新clone
+                    logger.warning(f"Local repository corrupted for {self.git_repo.name}, removing and re-cloning")
+                    import shutil
+                    shutil.rmtree(local_path)
+                    return self.clone_or_pull()  # 递归调用进行clone
                 
                 # 为git命令设置环境变量
                 with self.repo.git.custom_environment(**env_vars):
-                    origin.pull()
+                    # 先fetch远程分支
+                    origin.fetch()
+                    
+                    # 获取当前分支或目标分支
+                    try:
+                        current_branch = self.repo.active_branch.name
+                    except:
+                        # 如果没有active branch，使用配置的分支
+                        current_branch = self.git_repo.branch
+                    
+                    # 检查远程分支是否存在
+                    remote_branch = f'origin/{current_branch}'
+                    try:
+                        self.repo.git.merge(remote_branch)
+                    except git.exc.GitCommandError as merge_error:
+                        # 如果merge失败，尝试checkout到目标分支
+                        if 'not something we can merge' in str(merge_error):
+                            logger.info(f"Checking out branch {current_branch}")
+                            self.repo.git.checkout('-B', current_branch, remote_branch)
+                        else:
+                            raise merge_error
             else:
                 os.makedirs(os.path.dirname(local_path), exist_ok=True)
                 logger.info(f"Cloning repository {self.git_repo.name}")
@@ -70,6 +106,9 @@ class GitService:
                     branch=self.git_repo.branch,
                     env=clone_env
                 )
+                
+                # 确保remote refspec正确设置
+                self.repo.git.config('remote.origin.fetch', '+refs/heads/*:refs/heads/*')
                 
                 # 为仓库设置ssl配置
                 if not self.git_repo.ssl_verify:
@@ -162,7 +201,22 @@ class GitService:
             self.repo.index.commit(commit_message)
             
             origin = self.repo.remotes.origin
-            origin.push()
+            
+            # 确保remote refspec正确设置
+            try:
+                origin.refs
+            except (AttributeError, AssertionError):
+                logger.info(f"Setting up remote refspec for push operation")
+                self.repo.git.config('remote.origin.fetch', '+refs/heads/*:refs/heads/*')
+            
+            # 获取当前分支名
+            try:
+                current_branch = self.repo.active_branch.name
+            except:
+                current_branch = self.git_repo.branch
+            
+            # 推送到远程分支
+            origin.push(refspec=f'{current_branch}:{current_branch}')
             
             logger.info(f"Successfully committed and pushed changes to {self.git_repo.name}")
             return True
