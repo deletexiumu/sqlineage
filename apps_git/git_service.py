@@ -22,7 +22,17 @@ class GitService:
 
     def _get_auth_url(self):
         parsed = urlparse(self.git_repo.repo_url)
-        auth_netloc = f"{self.git_repo.username}:{self.git_repo.get_password()}@{parsed.netloc}"
+        password = self.git_repo.get_password()
+        
+        # 根据认证类型构建URL
+        if self.git_repo.auth_type == 'token':
+            # Token认证：使用token作为用户名，密码为空，或者使用特定格式
+            # GitLab Token认证通常使用 oauth2:token 或 token:x-oauth-basic 格式
+            auth_netloc = f"oauth2:{password}@{parsed.netloc}"
+        else:
+            # 用户名密码认证
+            auth_netloc = f"{self.git_repo.username}:{password}@{parsed.netloc}"
+        
         auth_url = urlunparse((
             parsed.scheme,
             auth_netloc,
@@ -33,9 +43,47 @@ class GitService:
         ))
         return auth_url
 
+    def _clear_git_credentials(self):
+        """清理Git凭据缓存，解决Windows凭据管理器问题"""
+        try:
+            import platform
+            if platform.system() == 'Windows':
+                # 在Windows上，清理可能缓存的凭据
+                parsed = urlparse(self.git_repo.repo_url)
+                host = parsed.netloc
+                
+                # 尝试清理Windows凭据管理器中的Git凭据
+                import subprocess
+                try:
+                    # 清理通用凭据
+                    subprocess.run([
+                        'cmdkey', '/delete:LegacyGeneric', f'target=git:http://{host}'
+                    ], capture_output=True, timeout=10)
+                    subprocess.run([
+                        'cmdkey', '/delete:LegacyGeneric', f'target=git:https://{host}'
+                    ], capture_output=True, timeout=10)
+                    logger.info(f"Cleared Windows credentials for {host}")
+                except (subprocess.TimeoutExpired, subprocess.SubprocessError):
+                    pass  # 忽略清理失败
+                    
+            # 通用Git凭据清理
+            if hasattr(self, 'repo') and self.repo:
+                try:
+                    # 禁用凭据助手
+                    self.repo.git.config('credential.helper', '')
+                    logger.info("Disabled Git credential helper")
+                except:
+                    pass
+                    
+        except Exception as e:
+            logger.debug(f"Credential cleanup failed: {str(e)}")
+
     def clone_or_pull(self):
         local_path = self.git_repo.repo_local_path
         auth_url = self._get_auth_url()
+        
+        # 清理可能的凭据缓存问题
+        self._clear_git_credentials()
         
         # 配置SSL验证选项
         env_vars = {}
@@ -46,6 +94,12 @@ class GitService:
                 'GIT_CURL_VERBOSE': '0'
             })
             logger.info(f"SSL verification disabled for {self.git_repo.name}")
+        
+        # 禁用凭据缓存，强制使用URL中的认证信息
+        env_vars.update({
+            'GIT_TERMINAL_PROMPT': '0',  # 禁用交互式提示
+            'GIT_ASKPASS': 'echo',       # 禁用密码提示
+        })
         
         try:
             if os.path.exists(local_path):
@@ -71,8 +125,14 @@ class GitService:
                 
                 # 使用底层Git命令绕过GitPython的refspec检查
                 with self.repo.git.custom_environment(**env_vars):
+                    # 禁用凭据助手，强制使用URL认证
+                    self.repo.git.config('credential.helper', '')
+                    
                     # 直接使用git命令设置refspec和fetch
                     self.repo.git.config('remote.origin.fetch', '+refs/heads/*:refs/heads/*')
+                    
+                    # 更新remote URL以包含认证信息
+                    self.repo.git.remote('set-url', 'origin', auth_url)
                     
                     # 使用git命令行直接fetch
                     self.repo.git.fetch('origin')
@@ -125,6 +185,9 @@ class GitService:
                 
                 # 确保remote refspec正确设置
                 self.repo.git.config('remote.origin.fetch', '+refs/heads/*:refs/heads/*')
+                
+                # 禁用凭据助手，避免Windows凭据管理器干扰
+                self.repo.git.config('credential.helper', '')
                 
                 # 为仓库设置ssl配置
                 if not self.git_repo.ssl_verify:

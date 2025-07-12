@@ -7,12 +7,18 @@ import os
 
 
 class GitRepo(models.Model):
+    AUTH_TYPE_CHOICES = [
+        ('password', '用户名密码'),
+        ('token', 'Token认证'),
+    ]
+    
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     name = models.CharField(max_length=255)
     repo_url = models.URLField()
     local_path = models.CharField(max_length=500, blank=True)
     username = models.CharField(max_length=255)
     encrypted_password = models.TextField()
+    auth_type = models.CharField(max_length=10, choices=AUTH_TYPE_CHOICES, default='password', help_text='认证方式：密码或Token')
     branch = models.CharField(max_length=100, default='main')
     ssl_verify = models.BooleanField(default=True, help_text='是否验证SSL证书，内网私有GitLab建议设为False')
     is_active = models.BooleanField(default=True)

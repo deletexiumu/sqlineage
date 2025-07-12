@@ -17,6 +17,13 @@
           <el-table :data="repos" v-loading="loading">
             <el-table-column prop="name" label="仓库名称" />
             <el-table-column prop="branch" label="分支" width="100" />
+            <el-table-column label="认证" width="80">
+              <template #default="scope">
+                <el-tag :type="scope.row.auth_type === 'token' ? 'success' : 'info'" size="small">
+                  {{ scope.row.auth_type === 'token' ? 'Token' : '密码' }}
+                </el-tag>
+              </template>
+            </el-table-column>
             <el-table-column label="状态" width="80">
               <template #default="scope">
                 <el-tag :type="scope.row.is_active ? 'success' : 'danger'">
@@ -139,11 +146,27 @@
         <el-form-item label="仓库URL">
           <el-input v-model="newRepo.repo_url" placeholder="https://github.com/user/repo.git" />
         </el-form-item>
-        <el-form-item label="用户名">
+        <el-form-item label="认证方式">
+          <el-radio-group v-model="newRepo.auth_type">
+            <el-radio label="password">用户名密码</el-radio>
+            <el-radio label="token">Token认证</el-radio>
+          </el-radio-group>
+          <div style="font-size: 12px; color: #666; margin-top: 5px;">
+            Token认证适用于GitLab Personal Access Token
+          </div>
+        </el-form-item>
+        <el-form-item label="用户名" v-if="newRepo.auth_type === 'password'">
           <el-input v-model="newRepo.username" placeholder="Git用户名" />
         </el-form-item>
-        <el-form-item label="密码">
-          <el-input v-model="newRepo.password" type="password" placeholder="Git密码或Token" />
+        <el-form-item :label="newRepo.auth_type === 'token' ? 'Token' : '密码'">
+          <el-input 
+            v-model="newRepo.password" 
+            type="password" 
+            :placeholder="newRepo.auth_type === 'token' ? 'Personal Access Token' : 'Git密码'"
+          />
+          <div style="font-size: 12px; color: #666; margin-top: 5px;" v-if="newRepo.auth_type === 'token'">
+            GitLab: User Settings → Access Tokens → Create Personal Access Token
+          </div>
         </el-form-item>
         <el-form-item label="分支">
           <el-input v-model="newRepo.branch" placeholder="main" />
@@ -194,6 +217,7 @@ const newRepo = ref({
   repo_url: '',
   username: '',
   password: '',
+  auth_type: 'password',
   branch: 'main',
   ssl_verify: true,
 })
@@ -225,9 +249,19 @@ const loadJobs = async () => {
 }
 
 const addRepo = async () => {
-  if (!newRepo.value.name || !newRepo.value.repo_url || !newRepo.value.username || !newRepo.value.password) {
+  if (!newRepo.value.name || !newRepo.value.repo_url || !newRepo.value.password) {
     ElMessage.warning('请填写完整信息')
     return
+  }
+  
+  if (newRepo.value.auth_type === 'password' && !newRepo.value.username) {
+    ElMessage.warning('用户名密码认证需要填写用户名')
+    return
+  }
+  
+  // Token认证时，设置默认用户名
+  if (newRepo.value.auth_type === 'token') {
+    newRepo.value.username = 'oauth2'
   }
 
   adding.value = true
@@ -235,7 +269,7 @@ const addRepo = async () => {
     await gitAPI.createRepo(newRepo.value)
     ElMessage.success('仓库添加成功')
     showAddRepo.value = false
-    newRepo.value = { name: '', repo_url: '', username: '', password: '', branch: 'main', ssl_verify: true }
+    newRepo.value = { name: '', repo_url: '', username: '', password: '', auth_type: 'password', branch: 'main', ssl_verify: true }
     await loadRepos()
   } catch (error) {
     console.error('Add repo error:', error)

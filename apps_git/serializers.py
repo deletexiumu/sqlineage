@@ -16,7 +16,7 @@ class GitRepoSerializer(serializers.ModelSerializer):
     class Meta:
         model = GitRepo
         fields = [
-            'id', 'name', 'repo_url', 'username', 'password', 'branch', 
+            'id', 'name', 'repo_url', 'username', 'password', 'auth_type', 'branch', 
             'ssl_verify', 'is_active', 'created_at', 'updated_at', 'last_sync', 'user'
         ]
         read_only_fields = ['created_at', 'updated_at', 'last_sync']
