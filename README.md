@@ -14,6 +14,9 @@ HiicHiveIDE 是一个专为内部团队使用的轻量级数据血缘分析工�
   - SSL证书验证可选，适配内网环境
   - 智能分支管理和手动分支选择
   - Windows凭据管理器兼容
+  - **双模式访问**: 本地克隆模式 + API访问模式
+  - **跨平台优化**: Windows路径权限问题完美解决
+  - **仓库管理**: 支持一键删除仓库和本地文件
 - ✏️ **SQL 编辑器**: 基于 Monaco Editor 的智能 SQL 编辑器，支持自动补全和实时血缘图展示
 - 📈 **双层可视化**: 表级血缘图（基于 AntV G6）+ 字段级血缘图（自定义SVG渲染）
 - 🎯 **交互式血缘图**: 
@@ -27,6 +30,8 @@ HiicHiveIDE 是一个专为内部团队使用的轻量级数据血缘分析工�
 - 🚀 **SQLFlow 集成**: 自动启动本地 SQLFlow 解析引擎，端口 19600
 - 🗂️ **自动化部署**: 智能数据库初始化和服务管理
 - 🔄 **智能同步**: Git仓库状态检测和自动恢复机制
+- 💾 **存储优化**: API模式零本地存储，适合空间受限环境
+- 🖥️ **Windows优化**: 完美适配Windows服务器部署，解决权限问题
 
 ## 技术架构
 
@@ -60,9 +65,10 @@ HiicHiveIDE/
 │   ├── views.py            # API 视图（包含自动补全）
 │   └── management/commands/ # 管理命令
 ├── apps_git/               # Git 集成应用
-│   ├── models.py          # GitRepo 模型
-│   ├── git_service.py     # Git 操作服务
-│   └── views.py           # Git API 视图
+│   ├── models.py          # GitRepo 模型（支持双模式访问）
+│   ├── git_service.py     # Git 操作服务（智能模式切换）
+│   ├── gitlab_api_service.py # GitLab API 客户端（纯API模式）
+│   └── views.py           # Git API 视图（含删除功能）
 ├── apps_lineage/          # 血缘分析应用
 │   ├── models.py         # LineageRelation, ColumnLineage 模型
 │   ├── lineage_service.py # 血缘分析服务
@@ -200,8 +206,10 @@ python manage.py crawl_metadata
 **配置 Git 仓库**
 1. 在前端界面配置 Git 仓库信息
 2. 选择认证方式：用户名密码 或 Token认证
-3. 支持内网私有 GitLab，可关闭 SSL 证书验证
-4. 智能分支管理和手动分支选择
+3. **选择访问模式**：本地克隆 或 API访问
+4. 支持内网私有 GitLab，可关闭 SSL 证书验证
+5. 智能分支管理和手动分支选择
+6. 一键删除仓库和本地文件
 
 **认证方式**
 - **用户名密码认证**: 传统的Git认证方式
@@ -214,18 +222,31 @@ python manage.py crawl_metadata
 - 使用Token认证避免密码问题
 - Windows环境自动处理凭据管理器冲突
 
+**访问模式**
+- **本地克隆模式**: 
+  - 下载完整仓库到本地
+  - 支持所有Git操作和离线工作
+  - 适合开发环境和稳定网络
+- **API访问模式**: 
+  - 零本地存储，纯API获取文件
+  - 避免Windows权限问题
+  - 适合Windows服务器部署
+  - 实时获取最新文件内容
+
 **分支管理**
 - 自动检测远程可用分支
 - 手动切换分支功能
 - 智能默认分支选择（main → master → 第一个可用分支）
+- 支持API模式和克隆模式的分支操作
 
 **API 端点**
 - `POST /api/git/repos/` - 创建 Git 仓库配置
-- `POST /api/git/repos/{id}/sync/` - 同步仓库
+- `POST /api/git/repos/{id}/sync/` - 同步仓库（克隆模式）
+- `DELETE /api/git/repos/{id}/` - 删除仓库和本地文件
 - `POST /api/git/repos/{id}/force_reclone/` - 强制重新克隆
-- `GET /api/git/repos/{id}/branches/` - 获取分支列表
+- `GET /api/git/repos/{id}/branches/` - 获取分支列表（支持双模式）
 - `POST /api/git/repos/{id}/switch_branch/` - 切换分支
-- `GET /api/git/repos/{id}/files/` - 获取 SQL 文件列表
+- `GET /api/git/repos/{id}/files/` - 获取 SQL 文件列表（支持双模式）
 
 ### 3. 血缘分析
 
@@ -397,6 +418,9 @@ GET /api/lineage/graph/                      # 血缘图数据
    - **Windows凭据管理器冲突**:
      - 系统自动清理旧凭据
      - 手动清理: Control Panel → Credential Manager
+   - **Windows权限问题**:
+     - 推荐使用"API访问"模式
+     - 避免本地文件操作的权限问题
 
 3. **分支操作失败**
    - **HEAD引用问题**: 系统自动检测和修复
@@ -436,13 +460,20 @@ npm run dev
 
 1. **大仓库处理**
    - 使用Token认证提高稳定性
-   - 定期清理本地仓库缓存
+   - **API模式**: 适合大仓库，无需下载完整仓库
+   - **克隆模式**: 定期清理本地仓库缓存
    - 选择合适的分支进行分析
 
 2. **血缘图性能**
    - 大图表使用全屏模式
    - 适时使用重置视角功能
    - 导出功能用于离线分析
+
+3. **部署环境优化**
+   - **Windows服务器**: 推荐API访问模式
+   - **Linux服务器**: 推荐本地克隆模式
+   - **空间受限**: 使用API模式节省磁盘空间
+   - **网络不稳定**: 使用克隆模式支持离线工作
 
 ## 许可证
 
