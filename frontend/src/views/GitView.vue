@@ -152,7 +152,10 @@
             <el-radio label="token">Token认证</el-radio>
           </el-radio-group>
           <div style="font-size: 12px; color: #666; margin-top: 5px;">
-            Token认证适用于GitLab Personal Access Token
+            <strong>Token认证说明:</strong><br/>
+            • GitLab: User Settings → Access Tokens → Create Personal Access Token<br/>
+            • 权限选择: read_repository (必须)<br/>
+            • 私有GitLab推荐使用Token认证，更稳定
           </div>
         </el-form-item>
         <el-form-item label="用户名" v-if="newRepo.auth_type === 'password'">
@@ -165,7 +168,11 @@
             :placeholder="newRepo.auth_type === 'token' ? 'Personal Access Token' : 'Git密码'"
           />
           <div style="font-size: 12px; color: #666; margin-top: 5px;" v-if="newRepo.auth_type === 'token'">
-            GitLab: User Settings → Access Tokens → Create Personal Access Token
+            <strong>Token创建步骤:</strong><br/>
+            1. GitLab → User Settings → Access Tokens<br/>
+            2. Token name: 随意填写 (例如: HiicHiveIDE)<br/>
+            3. Scopes: 勾选 read_repository<br/>
+            4. 复制生成的Token到此处
           </div>
         </el-form-item>
         <el-form-item label="分支">

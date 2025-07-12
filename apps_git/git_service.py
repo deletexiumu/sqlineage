@@ -26,9 +26,29 @@ class GitService:
         
         # 根据认证类型构建URL
         if self.git_repo.auth_type == 'token':
-            # Token认证：使用token作为用户名，密码为空，或者使用特定格式
-            # GitLab Token认证通常使用 oauth2:token 或 token:x-oauth-basic 格式
-            auth_netloc = f"oauth2:{password}@{parsed.netloc}"
+            # GitLab Token认证: 对于GitLab私有部署，推荐使用以下格式之一
+            # 1. 直接使用token作为用户名，密码留空
+            # 2. 使用token作为密码，用户名为任意值
+            # 3. 特殊格式: <username>:<token>
+            
+            # 尝试多种GitLab Token认证格式
+            # 格式1: token作为用户名，密码留空
+            if not hasattr(self, '_auth_format_tried'):
+                self._auth_format_tried = 0
+            
+            if self._auth_format_tried == 0:
+                # 第一次尝试：token作为用户名
+                auth_netloc = f"{password}:@{parsed.netloc}"
+            elif self._auth_format_tried == 1:
+                # 第二次尝试：任意用户名+token作为密码
+                auth_netloc = f"gitlab-ci-token:{password}@{parsed.netloc}"
+            elif self._auth_format_tried == 2:
+                # 第三次尝试：用设置的用户名+token
+                username = self.git_repo.username if self.git_repo.username else 'git'
+                auth_netloc = f"{username}:{password}@{parsed.netloc}"
+            else:
+                # 最后尝试：oauth2格式
+                auth_netloc = f"oauth2:{password}@{parsed.netloc}"
         else:
             # 用户名密码认证
             auth_netloc = f"{self.git_repo.username}:{password}@{parsed.netloc}"
@@ -41,6 +61,8 @@ class GitService:
             parsed.query,
             parsed.fragment
         ))
+        
+        logger.info(f"Using auth URL format for {self.git_repo.auth_type}: {parsed.scheme}://<credentials>@{parsed.netloc}{parsed.path}")
         return auth_url
 
     def _clear_git_credentials(self):
@@ -244,12 +266,38 @@ class GitService:
             return True
             
         except git.exc.GitCommandError as e:
-            if 'certificate verify failed' in str(e) or 'SSL certificate problem' in str(e):
+            error_msg = str(e)
+            
+            # 检查是否是认证错误
+            if ('Authentication failed' in error_msg or 
+                'access denied' in error_msg.lower() or 
+                'HTTP Basic: Access denied' in error_msg):
+                
+                # 如果是Token认证失败，尝试其他认证格式
+                if (self.git_repo.auth_type == 'token' and 
+                    hasattr(self, '_auth_format_tried') and 
+                    self._auth_format_tried < 3):
+                    
+                    self._auth_format_tried += 1
+                    logger.warning(f"Token auth failed, trying format {self._auth_format_tried} for {self.git_repo.name}")
+                    
+                    # 清理失败的clone目录
+                    if os.path.exists(local_path):
+                        import shutil
+                        shutil.rmtree(local_path)
+                    
+                    # 递归重试
+                    return self.clone_or_pull()
+                else:
+                    logger.error(f"Authentication failed for {self.git_repo.name}: {error_msg}")
+                    raise Exception(f"认证失败: 请检查用户名、密码或Token是否正确。详细错误: {error_msg}")
+                    
+            elif 'certificate verify failed' in error_msg or 'SSL certificate problem' in error_msg:
                 logger.error(f"SSL certificate error for {self.git_repo.name}. Try disabling SSL verification.")
                 raise Exception("SSL证书验证失败，请在仓库配置中关闭SSL验证选项")
             else:
-                logger.error(f"Git command failed for {self.git_repo.name}: {str(e)}")
-                raise Exception(f"Git操作失败: {str(e)}")
+                logger.error(f"Git command failed for {self.git_repo.name}: {error_msg}")
+                raise Exception(f"Git操作失败: {error_msg}")
         except Exception as e:
             logger.error(f"Failed to clone/pull repository {self.git_repo.name}: {str(e)}")
             raise Exception(f"仓库同步失败: {str(e)}")
