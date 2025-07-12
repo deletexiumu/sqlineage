@@ -1,255 +1,349 @@
-# SQL血缘关系分析系统
+# HiicHiveIDE - 轻量级数据血缘工具
 
-> 🤖 **本项目由AI自动生成** - 这是一个完全由Claude AI和Cursor编程助手协作开发的SQL血缘关系分析工具，展示了AI在复杂软件开发中的能力。
+## 项目概述
 
-一个专业的SQL血缘关系分析工具，支持Hive SQL解析、字段级血缘分析、表血缘浏览和可视化展示。
+HiicHiveIDE 是一个专为内部团队使用的轻量级数据血缘分析工具，支持 5-20 人的小型团队。主要功能包括 Hive SQL 血缘关系分析、元数据管理和代码开发功能。
 
-## 🌟 功能特性
+## 核心特性
 
-### ✅ SQL解析与分析
-- 🔍 支持Hive SQL语法解析  
-- 📝 多语句解析（DDL + ETL组合）
-- 🧹 自动过滤注释和解释性文字
-- ⚠️ 语法验证和错误提示
-- 📊 复杂SQL语句结构分析
+- 🔍 **智能血缘分析**: 实时解析 Hive SQL 语句，自动提取表级和字段级血缘关系
+- 📊 **元数据管理**: 自动爬取并管理 Hive 表和列信息，提供实时统计数据
+- 🔧 **Git 集成**: 连接 GitLab/GitHub，支持代码管理和批量分析
+- ✏️ **SQL 编辑器**: 基于 Monaco Editor 的智能 SQL 编辑器，支持自动补全和实时血缘图展示
+- 📈 **双层可视化**: 表级血缘图（基于 AntV G6）+ 字段级血缘图（自定义SVG渲染）
+- 🎯 **交互式血缘图**: 字段高亮、连线跟踪、鼠标悬停效果、表名智能省略
+- 📥 **血缘图导出**: 支持 PNG/SVG 格式下载，便于文档制作和分享
+- 📱 **响应式设计**: 完美适配移动端和小屏幕设备
+- 👥 **用户管理**: 支持多用户独立配置 Git 仓库
 
-### ✅ 血缘关系可视化
-- 🔗 字段级别的连线关系展示
-- 📋 **表列表浏览器** - 分类展示源表和目标表
-- 🔍 **血缘关系过滤** - 支持表名搜索和筛选
-- 🎯 **hover高亮显示** - 鼠标悬停自动高亮相关血缘
-- 💡 **智能布局算法** - 动态计算节点高度，避免重叠
-- 🖱️ **拖拽边界限制** - 防止节点拖出可视区域
-- 🎨 多种视觉效果（高亮、发光、透明度）
+## 技术架构
 
-### ✅ 表血缘交互功能
-- 📊 **表统计面板** - 显示源表、目标表和映射数量
-- 🔍 **表搜索功能** - 快速定位特定表名
-- 📂 **分类浏览** - 按表类型（源表/目标表）分组显示
-- 💬 **hover血缘窗口** - 鼠标悬停显示相关血缘关系
-- 📋 **详细血缘对话框** - 查看上游依赖、下游影响和字段映射
-- ⭐ **相关血缘高亮** - 动态高亮显示相关表和连接线
+### 后端架构
+- **框架**: Django 5.2.4 + Django REST Framework
+- **数据库**: SQLite（适合小团队快速部署）
+- **认证**: Django 内置用户系统 + Token 认证
+- **血缘解析**: 外部 SQL 解析服务（Gudu SQLFlow）
+- **Git 集成**: GitPython
+- **Hive 连接**: PyHive + Kerberos 认证
 
-### ✅ 数据库集成
-- 🗄️ 支持从数据库读取表结构
-- 📝 DDL语句解析和存储
-- 🔌 多数据库类型支持
-- 📚 本地DDL历史记录
+### 前端架构
+- **框架**: Vue.js 3 + TypeScript + Composition API
+- **UI 组件**: Element Plus（完全响应式）
+- **代码编辑器**: Monaco Editor（支持语法高亮和自动补全）
+- **图表可视化**: 
+  - 表级血缘图: AntV G6
+  - 字段级血缘图: 自定义SVG渲染引擎
+- **HTTP 客户端**: Axios
+- **响应式布局**: 支持移动端和多尺寸屏幕
 
-### ✅ GitLab集成
-- 📁 浏览GitLab上的SQL文件
-- 🔍 文件搜索和版本管理
-- 📦 批量文件分析
-- 🔄 文件内容同步
+## 项目结构
 
-## 🚀 快速开始
+```
+HiicHiveIDE/
+├── hive_ide/                 # Django 主项目配置
+├── apps_core/               # 核心应用（认证等）
+├── apps_metadata/           # 元数据管理应用
+│   ├── models.py           # HiveTable, BusinessMapping 模型
+│   ├── hive_crawler.py     # Hive 元数据爬虫
+│   ├── views.py            # API 视图（包含自动补全）
+│   └── management/commands/ # 管理命令
+├── apps_git/               # Git 集成应用
+│   ├── models.py          # GitRepo 模型
+│   ├── git_service.py     # Git 操作服务
+│   └── views.py           # Git API 视图
+├── apps_lineage/          # 血缘分析应用
+│   ├── models.py         # LineageRelation, ColumnLineage 模型
+│   ├── lineage_service.py # 血缘分析服务
+│   └── views.py          # 血缘 API 视图
+├── frontend/             # Vue.js 前端应用
+│   ├── src/components/   # Vue 组件
+│   │   ├── LineageGraph.vue      # 血缘可视化主组件
+│   │   └── ColumnLineageGraph.vue # 字段级血缘图组件
+│   ├── src/views/       # 页面视图（完全响应式）
+│   └── src/services/    # API 服务层
+└── requirements.txt     # Python 依赖
+```
 
-### 安装依赖
+## 安装部署
+
+### 环境要求
+- Python 3.8+
+- Node.js 16+
+- Kerberos 客户端（如需连接 Hive）
+
+### 快速开始
+
+1. **克隆项目**
 ```bash
+git clone <repository-url>
+cd HiicHiveIDE
+```
+
+2. **安装后端依赖**
+```bash
+pip install -r requirements.txt
+```
+
+3. **数据库初始化**
+```bash
+python manage.py makemigrations
+python manage.py migrate
+python manage.py createsuperuser
+```
+
+4. **安装前端依赖**
+```bash
+cd frontend
 npm install
 ```
 
-### 启动开发服务器
+5. **启动服务**
+
+后端服务：
 ```bash
+python manage.py runserver
+```
+
+前端开发服务器：
+```bash
+cd frontend
 npm run dev
 ```
 
-浏览器访问: http://localhost:5173
+## 配置说明
 
-### 构建生产版本
+### Hive 连接配置
+在 `hive_ide/settings.py` 中配置 Hive 连接信息：
+
+```python
+HIVE_CONFIG = {
+    'host': 'your-hive-host',
+    'port': 10000,
+    'database': 'default',
+    'auth': 'KERBEROS',
+    'kerberos_service_name': 'hive',
+}
+```
+
+### SQL 解析服务配置
+配置外部 SQL 解析服务地址：
+
+```python
+SQLFLOW_CONFIG = {
+    'url': 'http://localhost:9600/sqlflow/datalineage',
+    'timeout': 30,
+}
+```
+
+## 使用指南
+
+### 1. 元数据管理
+
+**爬取 Hive 元数据**
 ```bash
-npm run build
+python manage.py crawl_metadata
 ```
 
-## 📖 使用指南
+**API 端点**
+- `GET /api/metadata/tables/` - 获取表列表
+- `GET /api/metadata/tables/autocomplete/` - 自动补全接口
+- `GET /api/metadata/business-mappings/` - 业务映射管理
 
-### 1. 基础SQL分析
-```sql
--- 示例SQL：用户行为数据血缘分析
-CREATE TABLE IF NOT EXISTS ods.user_events (
-    event_id BIGINT COMMENT '事件ID',
-    user_id BIGINT COMMENT '用户ID', 
-    session_id STRING COMMENT '会话ID',
-    event_type STRING COMMENT '事件类型',
-    event_time TIMESTAMP COMMENT '事件时间'
-) COMMENT '用户行为事件表'
-PARTITIONED BY (dt STRING COMMENT '分区日期');
+### 2. Git 集成
 
-CREATE TABLE IF NOT EXISTS dw.user_behavior_summary (
-    user_id BIGINT COMMENT '用户ID',
-    activity_date DATE COMMENT '活动日期',
-    page_views INT COMMENT '页面浏览数',
-    click_count INT COMMENT '点击次数'
-) COMMENT '用户行为汇总表'
-PARTITIONED BY (dt STRING COMMENT '分区日期');
+**配置 Git 仓库**
+1. 登录系统
+2. 在前端界面配置 Git 仓库信息
+3. 同步仓库代码
 
-INSERT OVERWRITE TABLE dw.user_behavior_summary PARTITION(dt='2024-01-01')
-SELECT 
-    u.user_id AS user_id,
-    DATE(u.event_time) AS activity_date,
-    COUNT(CASE WHEN u.event_type = 'page_view' THEN 1 END) AS page_views,
-    COUNT(CASE WHEN u.event_type = 'click' THEN 1 END) AS click_count
-FROM ods.user_events u
-WHERE DATE(u.event_time) = '2024-01-01'
-    AND u.user_id IS NOT NULL
-GROUP BY u.user_id, DATE(u.event_time);
-```
+**API 端点**
+- `POST /api/git/repos/` - 创建 Git 仓库配置
+- `POST /api/git/repos/{id}/sync/` - 同步仓库
+- `GET /api/git/repos/{id}/files/` - 获取 SQL 文件列表
 
-### 2. 表血缘浏览功能
-1. **分析SQL** - 在左侧编辑器输入SQL后点击"分析血缘"
-2. **查看表列表** - 右侧面板自动显示表分类统计
-3. **搜索表** - 使用搜索框快速定位特定表
-4. **hover查看血缘** - 鼠标悬停在表上查看相关血缘高亮
-5. **点击查看详情** - 点击表名打开详细血缘关系对话框
+### 3. 血缘分析
 
-### 3. 血缘关系探索
-- 🎯 **上游依赖** - 查看当前表依赖的源表
-- 📊 **下游影响** - 查看当前表影响的目标表  
-- 🔗 **字段映射** - 查看具体的字段级血缘关系
-- 💡 **智能高亮** - 自动高亮相关的表和连接线
-
-## 🎬 系统截图
-
-### 主界面
-- 左侧：SQL编辑器和GitLab浏览器
-- 中间：血缘关系可视化图形
-- 右侧：表列表浏览器和详细信息面板
-
-### 表血缘浏览器
-- 📊 表统计卡片（源表/目标表/映射数量）
-- 🔍 表搜索和分类切换
-- 📋 表详细信息（字段列表、数据库等）
-- 💬 血缘关系对话框
-
-访问 http://localhost:5173 查看完整界面
-
-## 🏗️ 技术架构
-
-- **前端框架**: Vue 3 + Composition API
-- **UI组件**: Element Plus
-- **图形可视化**: D3.js + SVG
-- **SQL解析**: node-sql-parser (自定义扩展)
-- **构建工具**: Vite
-- **代码风格**: ESLint + Prettier
-
-## 📦 核心模块
-
-### 前端组件
-- `App.vue` - 主应用入口，布局管理
-- `SqlEditor.vue` - SQL编辑器组件  
-- `LineageGraph.vue` - 血缘关系可视化图形
-- `TableListPanel.vue` - **表列表浏览面板**
-- `TableGroup.vue` - **表分组展示组件**
-- `ConfigPanel.vue` - 系统配置面板
-
-### 核心工具类
-- `sqlParser.js` - SQL解析核心引擎
-- `lineageAnalyzer.js` - 血缘关系分析算法
-- `databaseManager.js` - 数据库连接管理
-- `gitlabIntegration.js` - GitLab API集成
-
-### 关键算法
-- **智能布局算法** - 动态计算节点位置，避免碰撞
-- **血缘关系计算** - 字段级依赖关系分析
-- **拖拽边界控制** - 防止节点超出可视区域
-- **高亮渲染优化** - 高性能的视觉反馈系统
-
-## ⚙️ 配置说明
-
-### 数据库配置
-```javascript
+**解析单个 SQL（支持实时字段级血缘）**
+```bash
+POST /api/lineage/parse-sql/
 {
-  type: 'hive',
-  host: 'localhost', 
-  port: '10000',
-  username: 'hive',
-  password: '',
-  database: 'default'
+    "sql_text": "INSERT INTO target_table SELECT * FROM source_table",
+    "file_path": "optional/file/path.sql"
 }
 ```
 
-### GitLab配置
-```javascript
+返回结果包含：
+- 表级血缘关系
+- 字段级血缘图数据（column_graph）
+- 表统计信息
+
+**批量解析仓库**
+```bash
+POST /api/lineage/parse-repo/
 {
-  baseUrl: 'https://gitlab.example.com',
-  accessToken: 'your-access-token',
-  projectId: '123'
+    "repo_id": 1
 }
 ```
 
-### 分析配置
-```javascript
+**影响分析**
+```bash
+GET /api/lineage/impact/?table_name=database.table_name
+```
+
+**统计数据获取**
+```bash
+GET /api/metadata/tables/statistics/
+```
+
+### 4. SQL 编辑器与可视化
+
+前端提供基于 Monaco Editor 的 SQL 编辑器，支持：
+- 语法高亮和错误检查
+- 自动补全（表名、列名）
+- 实时 SQL 解析和血缘分析
+- **集成血缘图展示**: 解析成功后自动显示字段级血缘图
+- 双模式可视化：
+  - **表级血缘图**: 基于 AntV G6 的节点连线图，支持图形下载
+  - **字段级血缘图**: 自定义 SVG 渲染，源表在左，目标表在右
+  - **智能表名处理**: 自动省略库名，长表名智能截断，悬停显示完整名称
+  - **交互功能**: 鼠标悬停字段高亮相关连线和依赖字段
+  - **导出功能**: 支持 PNG 和 SVG 格式下载
+
+### 5. 响应式设计
+
+系统完全支持响应式布局：
+- **桌面端** (>1200px): 完整功能展示
+- **平板端** (768px-1200px): 优化布局，保持核心功能
+- **手机端** (<768px): 移动优先设计，抽屉式导航
+
+## API 文档
+
+### 认证
+使用 Token 认证：
+```bash
+POST /api/auth/login/
 {
-  fieldLevel: true,        // 是否显示字段级血缘
-  autoLayout: true,        // 是否启用智能布局
-  dragBoundary: true,      // 是否启用拖拽边界
-  highlightRelated: true   // 是否启用相关血缘高亮
+    "username": "your_username",
+    "password": "your_password"
 }
 ```
 
-## 📁 项目结构
-
+返回 Token 后，在后续请求头中添加：
 ```
-src/
-├── components/
-│   ├── SqlEditor.vue         # SQL编辑器组件
-│   ├── LineageGraph.vue      # 血缘关系图组件
-│   ├── TableListPanel.vue    # 🆕 表列表浏览面板
-│   ├── TableGroup.vue        # 🆕 表分组展示组件  
-│   └── ConfigPanel.vue       # 配置面板组件
-├── utils/
-│   ├── sqlParser.js          # SQL解析器
-│   ├── lineageAnalyzer.js    # 血缘分析器
-│   ├── databaseManager.js    # 数据库管理器
-│   └── gitlabIntegration.js  # GitLab集成工具
-├── App.vue                   # 主应用组件
-└── main.js                   # 应用入口
+Authorization: Token your_token_here
 ```
 
-## 🤖 AI开发说明
+### 主要 API 端点
 
-本项目完全由AI驱动开发，展示了以下AI能力：
+#### 元数据 API
+```
+GET /api/metadata/tables/                    # 表列表
+GET /api/metadata/tables/databases/          # 数据库列表  
+GET /api/metadata/tables/autocomplete/       # 自动补全
+GET /api/metadata/tables/statistics/         # 统计数据（数据库、表、字段、血缘关系数量）
+POST /api/metadata/business-mappings/        # 创建业务映射
+```
 
-### 代码生成能力
-- ✅ 复杂Vue组件架构设计
-- ✅ D3.js图形算法实现  
-- ✅ SQL解析器逻辑构建
-- ✅ 数据库集成方案设计
+#### Git API
+```
+GET /api/git/repos/                          # 用户的仓库列表
+POST /api/git/repos/                         # 创建仓库配置
+POST /api/git/repos/{id}/sync/               # 同步仓库
+GET /api/git/repos/{id}/files/               # 获取文件列表
+```
 
-### 问题解决能力  
-- ✅ 节点碰撞检测和避免算法
-- ✅ 拖拽边界控制实现
-- ✅ 血缘关系高亮优化
-- ✅ 性能优化和内存管理
+#### 血缘 API
+```
+POST /api/lineage/parse-sql/                 # 解析单个SQL（返回表级+字段级血缘）
+POST /api/lineage/parse-repo/{repo_id}/      # 批量解析仓库
+GET /api/lineage/impact/                     # 影响分析
+GET /api/lineage/graph/                      # 血缘图数据
+```
 
-### 用户体验设计
-- ✅ 直观的表血缘浏览界面
-- ✅ 流畅的交互动画效果
-- ✅ 智能的搜索和过滤功能
-- ✅ 友好的错误处理机制
+**parse-sql API 返回格式**:
+```json
+{
+  "status": "success",
+  "relations_count": 3,
+  "relations": [...],
+  "column_graph": {
+    "tables": [
+      {
+        "name": "source_table",
+        "type": "source",
+        "columns": ["col1", "col2"]
+      }
+    ],
+    "relationships": [
+      {
+        "source_table": "source_table",
+        "source_column": "col1",
+        "target_table": "target_table", 
+        "target_column": "col1",
+        "relation_type": "insert"
+      }
+    ]
+  }
+}
+```
 
-## 🔮 未来规划
+## 开发指南
 
-- [ ] 支持更多SQL方言（MySQL、PostgreSQL等）
-- [ ] 添加血缘关系导出功能
-- [ ] 集成数据质量检查
-- [ ] 支持实时数据血缘监控
-- [ ] 添加血缘影响分析报告
+### 添加新功能
 
-## 🤝 贡献
+1. **后端开发**
+   - 在对应 app 中添加模型、视图、序列化器
+   - 更新 URL 配置
+   - 编写单元测试
 
-欢迎提交Issue和Pull Request来改进这个项目。
+2. **前端开发**
+   - 在 `frontend/src/components/` 中添加组件
+   - 在 `frontend/src/services/api.ts` 中添加 API 调用
+   - 更新路由配置
 
-### 开发约定
-- 使用Vue 3 Composition API
-- 遵循Element Plus设计规范  
-- 保持代码注释完整性
-- 确保组件可复用性
+### 代码风格
+- 后端：遵循 Django 和 PEP 8 规范
+- 前端：使用 TypeScript，遵循 Vue 3 最佳实践
 
-## 📄 许可证
+## 故障排除
 
-MIT License
+### 常见问题
 
----
+1. **Hive 连接失败**
+   - 检查 Kerberos 配置
+   - 验证网络连通性
+   - 确认用户权限
 
-**🤖 AI生成项目声明**: 本项目展示了AI在软件开发领域的强大能力，从需求分析到代码实现，再到文档编写，均由AI自主完成。这为未来AI辅助开发提供了宝贵的实践经验。
+2. **Git 同步失败**
+   - 检查用户名密码
+   - 验证仓库地址
+   - 确认网络访问
+
+3. **SQL 解析失败**
+   - 确认解析服务可用
+   - 检查 SQL 语法
+   - 验证服务配置
+
+### 日志查看
+```bash
+# Django 日志
+tail -f logs/django.log
+
+# 前端开发日志
+npm run dev
+```
+
+## 许可证
+
+本项目仅供内部使用，不涉及商业用途。
+
+## 贡献指南
+
+1. Fork 项目
+2. 创建功能分支
+3. 提交更改
+4. 发起 Pull Request
+
+## 联系方式
+
+如有问题，请联系开发团队或提交 Issue。

@@ -1,0 +1,49 @@
+1.接受Hive SQL语句输入,能够将语句解析为血缘关系。
+
+2.能够爬取Hive库的meta信息并保存本地,目前无法连接meta库,只能通过Kerberos认证连接当Hive库然后枚举遍历。
+
+3.能够连通gitlab,完成git相关功能。
+
+4.每个用户独立配置,能够单独配置自己的gitlab相关信息。并且能够拉取、提交代码。
+
+5.能够批量解析git上SQL脚本的血缘关系,并且结合本地的meta信息进行解析,并且将解析结果保存在本地。
+
+6.能够支持SQL脚本开发,结合meta信息,实现代码自动补全功能。
+
+7.在第六点的基础上,限制用户真正执行SQL,只有配置权限的用户才可以执行SQL。默认都是没有SQL执行权限的。
+
+8.能够配置表名与应用、模块的关系。
+
+9.上下游影响分析,输入库名.表名,根据存储的血缘信息能够分析出下游哪些表、应用、模块会受到影响。
+
+---
+
+1.该工具仅在项目内部使用，人数约几人~二十几人。不涉及商业使用，不涉及复杂权限控制。所以希望是尽快能轻量化实现。
+
+2.血缘分析上，目前内部已有一个解析服务，可以完美完成Hive SQL的解析功能。只要通过HTTP接口就可以实现。
+
+3.仅对于git模块仅支持本地用户名密码校验，其他模块不做权限控制。
+
+4.目前个人偏向于Django+Vue前后端分离的形式。注意之前还有个SQL补全似乎并没有说。
+
+刚才第二点接口说明：
+
+POST接口
+
+接口地址：http://localhost:9600/sqlflow/datalineage
+接口参数：{
+"dbVendor": "dbvhive",
+"sqlText": "带分析的具体SQL语句，长度不超过10K。",
+"ignoreRecordSet": true,
+"showConstantTable": false,
+"simpleShowFunction": false,
+"indirect": false,
+"tableLevel": false,
+"showTransform": false
+}
+接口返回：{
+    "code": 200,
+    "msg": null,
+    "data": "解析后的结果，在后续开发中单独提供样例"
+}
+

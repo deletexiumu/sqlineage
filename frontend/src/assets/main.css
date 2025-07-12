@@ -1,0 +1,67 @@
+@import './base.css';
+
+/* 全屏应用布局 */
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+#app {
+  width: 100%;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  font-weight: normal;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 链接样式 */
+a,
+.green {
+  text-decoration: none;
+  color: hsla(160, 100%, 37%, 1);
+  transition: 0.4s;
+  padding: 3px;
+}
+
+@media (hover: hover) {
+  a:hover {
+    background-color: hsla(160, 100%, 37%, 0.2);
+  }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .el-menu.el-menu--horizontal {
+    display: none !important;
+  }
+  
+  .mobile-menu-toggle {
+    display: block !important;
+  }
+  
+  .header {
+    flex-wrap: wrap;
+  }
+  
+  .logo h2 {
+    font-size: 16px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .logo h2 {
+    font-size: 14px !important;
+  }
+  
+  .el-header {
+    padding: 0 10px !important;
+  }
+}
