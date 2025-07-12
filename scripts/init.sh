@@ -76,8 +76,8 @@ export LDFLAGS="-L/opt/homebrew/opt/cyrus-sasl/lib"
 # 安装 Python 依赖
 # ────────────────────────────────────────────────────────────
 echo "📦 安装 Python 依赖..."
-pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -U pip
-pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt
+pip install -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn -U pip
+pip install -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn -r requirements.txt
 echo "✅ Python 依赖安装完成"
 
 # ────────────────────────────────────────────────────────────
