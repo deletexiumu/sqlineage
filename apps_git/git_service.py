@@ -146,11 +146,35 @@ class GitService:
                     
                     # 检查远程分支是否存在
                     try:
-                        # 列出所有远程分支
-                        remote_branches = self.repo.git.branch('-r').split('\n')
-                        remote_branches = [b.strip().replace('origin/', '') for b in remote_branches if 'origin/' in b and '->' not in b]
+                        # 先检查仓库状态
+                        try:
+                            # 尝试获取当前HEAD状态
+                            self.repo.git.rev_parse('HEAD')
+                            has_head = True
+                        except git.exc.GitCommandError:
+                            has_head = False
+                            logger.info(f"Repository {self.git_repo.name} has no HEAD, will initialize")
                         
-                        # 如果目标分支不在远程分支列表中，使用默认分支
+                        # 获取远程分支列表的更安全方式
+                        try:
+                            remote_refs_output = self.repo.git.ls_remote('--heads', 'origin')
+                            remote_branches = []
+                            for line in remote_refs_output.split('\n'):
+                                if line.strip() and 'refs/heads/' in line:
+                                    branch_name = line.split('refs/heads/')[-1].strip()
+                                    remote_branches.append(branch_name)
+                        except git.exc.GitCommandError:
+                            # 如果ls-remote失败，使用fetch后的本地引用
+                            try:
+                                branch_output = self.repo.git.branch('-r')
+                                remote_branches = [b.strip().replace('origin/', '') 
+                                                 for b in branch_output.split('\n') 
+                                                 if 'origin/' in b and '->' not in b and b.strip()]
+                            except git.exc.GitCommandError:
+                                # 最后的备选方案
+                                remote_branches = ['main', 'master']
+                        
+                        # 如果目标分支不在远程分支列表中，选择默认分支
                         if current_branch not in remote_branches:
                             if 'main' in remote_branches:
                                 current_branch = 'main'
@@ -161,13 +185,34 @@ class GitService:
                             
                             logger.info(f"Switching to available branch: {current_branch}")
                         
-                        # 切换到目标分支
-                        self.repo.git.checkout('-B', current_branch, f'origin/{current_branch}')
+                        # 安全地切换到目标分支
+                        try:
+                            if has_head:
+                                # 如果有HEAD，正常切换分支
+                                self.repo.git.checkout('-B', current_branch, f'origin/{current_branch}')
+                            else:
+                                # 如果没有HEAD，需要先创建初始分支
+                                try:
+                                    self.repo.git.checkout('-b', current_branch, f'origin/{current_branch}')
+                                except git.exc.GitCommandError:
+                                    # 如果还是失败，尝试直接reset
+                                    self.repo.git.symbolic_ref('HEAD', f'refs/heads/{current_branch}')
+                                    self.repo.git.reset('--hard', f'origin/{current_branch}')
+                        except git.exc.GitCommandError as checkout_error:
+                            logger.warning(f"Checkout failed: {checkout_error}, trying alternative approach")
+                            # 备选方案：直接设置HEAD和reset
+                            try:
+                                self.repo.git.symbolic_ref('HEAD', f'refs/heads/{current_branch}')
+                                self.repo.git.reset('--hard', f'origin/{current_branch}')
+                            except git.exc.GitCommandError as reset_error:
+                                logger.error(f"Reset also failed: {reset_error}")
+                                # 最后的备选方案：强制重新clone
+                                raise Exception(f"无法切换到分支 {current_branch}，仓库状态异常")
                         
                     except git.exc.GitCommandError as e:
                         logger.error(f"Branch operation failed: {str(e)}")
-                        # 尝试reset到remote HEAD
-                        self.repo.git.reset('--hard', 'origin/HEAD')
+                        # 如果所有分支操作都失败，标记需要重新clone
+                        raise Exception(f"分支操作失败，建议删除本地仓库重新同步: {str(e)}")
             else:
                 os.makedirs(os.path.dirname(local_path), exist_ok=True)
                 logger.info(f"Cloning repository {self.git_repo.name}")
@@ -360,13 +405,33 @@ class GitService:
                 with self.repo.git.custom_environment(**env_vars):
                     # 先fetch获取最新的远程分支信息
                     self.repo.git.config('remote.origin.fetch', '+refs/heads/*:refs/heads/*')
-                    self.repo.git.fetch('origin')
                     
-                    # 获取远程分支列表
-                    remote_branches = self.repo.git.branch('-r').split('\n')
-                    branches = [b.strip().replace('origin/', '') for b in remote_branches if 'origin/' in b and '->' not in b]
-                    
-                    return branches
+                    try:
+                        self.repo.git.fetch('origin')
+                        
+                        # 尝试使用ls-remote获取远程分支，这样更可靠
+                        try:
+                            remote_refs_output = self.repo.git.ls_remote('--heads', 'origin')
+                            branches = []
+                            for line in remote_refs_output.split('\n'):
+                                if line.strip() and 'refs/heads/' in line:
+                                    branch_name = line.split('refs/heads/')[-1].strip()
+                                    branches.append(branch_name)
+                            return branches
+                        except git.exc.GitCommandError:
+                            # 备选方案：使用branch -r
+                            try:
+                                remote_branches = self.repo.git.branch('-r').split('\n')
+                                branches = [b.strip().replace('origin/', '') 
+                                           for b in remote_branches 
+                                           if 'origin/' in b and '->' not in b and b.strip()]
+                                return branches
+                            except git.exc.GitCommandError:
+                                # 最后的备选方案
+                                return ['main', 'master']
+                    except git.exc.GitCommandError:
+                        # 如果fetch失败，返回默认分支
+                        return ['main', 'master']
                     
         except Exception as e:
             logger.error(f"Failed to get remote branches for {self.git_repo.name}: {str(e)}")

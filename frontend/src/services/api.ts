@@ -133,6 +133,9 @@ export const gitAPI = {
   syncRepo: (id: number) =>
     api.post(`/git/repos/${id}/sync/`),
   
+  forceReclone: (id: number) =>
+    api.post(`/git/repos/${id}/force_reclone/`),
+  
   getRepoFiles: (id: number) =>
     api.get(`/git/repos/${id}/files/`),
   

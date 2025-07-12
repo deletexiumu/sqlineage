@@ -194,7 +194,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { gitAPI, lineageAPI, type GitRepo, type LineageParseJob } from '@/services/api'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 
 const loading = ref(false)
@@ -285,9 +285,35 @@ const syncRepo = async (repo: GitRepo) => {
     await gitAPI.syncRepo(repo.id)
     ElMessage.success('仓库同步成功')
     await loadRepos()
-  } catch (error) {
+  } catch (error: any) {
     console.error('Sync repo error:', error)
-    ElMessage.error('仓库同步失败')
+    
+    // 检查是否需要强制重新克隆
+    if (error?.response?.data?.action === 'force_reclone') {
+      ElMessageBox.confirm(
+        `${error.response.data.message}。是否要删除本地仓库并重新克隆？`,
+        '仓库状态异常',
+        {
+          confirmButtonText: '重新克隆',
+          cancelButtonText: '取消',
+          type: 'warning',
+        }
+      ).then(async () => {
+        try {
+          await gitAPI.forceReclone(repo.id)
+          ElMessage.success('仓库重新克隆成功')
+          await loadRepos()
+        } catch (recloneError) {
+          console.error('Force reclone error:', recloneError)
+          ElMessage.error('重新克隆失败')
+        }
+      }).catch(() => {
+        ElMessage.info('已取消重新克隆')
+      })
+    } else {
+      const errorMsg = error?.response?.data?.details || error?.response?.data?.message || '仓库同步失败'
+      ElMessage.error(errorMsg)
+    }
   } finally {
     syncingRepos.value.delete(repo.id)
   }

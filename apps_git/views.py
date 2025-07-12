@@ -4,12 +4,16 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.models import User
+import os
+import logging
 from .models import GitRepo
 from .serializers import (
     GitRepoSerializer, GitFileSerializer, GitCommitSerializer,
     FileContentSerializer, CommitSerializer, UserSerializer
 )
 from .git_service import GitService
+
+logger = logging.getLogger(__name__)
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
@@ -66,14 +70,67 @@ class GitRepoViewSet(viewsets.ModelViewSet):
         git_repo = self.get_object()
         git_service = GitService(git_repo)
         
-        success = git_service.clone_or_pull()
-        if success:
-            return Response({'status': 'success', 'message': 'Repository synced successfully'})
-        else:
-            return Response(
-                {'status': 'error', 'message': 'Failed to sync repository'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        try:
+            success = git_service.clone_or_pull()
+            if success:
+                return Response({'status': 'success', 'message': 'Repository synced successfully'})
+            else:
+                return Response(
+                    {'status': 'error', 'message': 'Failed to sync repository'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except Exception as e:
+            error_message = str(e)
+            
+            # 检查是否是需要重新clone的错误
+            if "建议删除本地仓库重新同步" in error_message or "仓库状态异常" in error_message:
+                return Response({
+                    'status': 'error',
+                    'message': '仓库状态异常，建议重新同步',
+                    'action': 'force_reclone',
+                    'details': error_message
+                }, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                return Response({
+                    'status': 'error',
+                    'message': '仓库同步失败',
+                    'details': error_message
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'])
+    def force_reclone(self, request, pk=None):
+        """强制重新克隆仓库"""
+        git_repo = self.get_object()
+        
+        try:
+            # 删除本地仓库目录
+            local_path = git_repo.repo_local_path
+            if os.path.exists(local_path):
+                import shutil
+                shutil.rmtree(local_path)
+                logger.info(f"Removed corrupted repository at {local_path}")
+            
+            # 重新克隆
+            git_service = GitService(git_repo)
+            success = git_service.clone_or_pull()
+            
+            if success:
+                return Response({
+                    'status': 'success', 
+                    'message': '仓库重新克隆成功'
+                })
+            else:
+                return Response({
+                    'status': 'error', 
+                    'message': '重新克隆失败'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': '重新克隆失败',
+                'details': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['get'])
     def files(self, request, pk=None):
