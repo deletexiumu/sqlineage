@@ -6,13 +6,82 @@
 
 - ✅ **已完成**: 智能血缘分析、字段级血缘图、下载导出、SQL编辑器集成、响应式设计
 - 🚧 **进行中**: 无
-- ⏳ **待实现**: 3个高优先级功能
+- ⏳ **待实现**: 6个高优先级功能
 
 ---
 
 ## 🎯 高优先级功能 (High Priority)
 
-### 1. 血缘图交互增强
+### 1. 数据库初始化优化
+**功能描述**: 增加数据库初始化动作，当数据库文件不存在时，在初始化脚本中自动创建并初始化数据库
+
+**需求详情**:
+- 检查数据库文件（db.sqlite3）是否存在
+- 如果不存在，自动执行数据库创建和迁移操作
+- 添加必要的初始数据和配置
+- 确保脚本的幂等性和安全性
+
+**技术实现**:
+- 修改 `scripts/init.sh` 脚本，添加数据库存在性检查
+- 自动执行 `makemigrations` 和 `migrate` 命令
+- 可选择性创建默认超级用户
+
+**影响文件**:
+- `scripts/init.sh`
+- `scripts/start.sh`
+- `scripts/init.bat`
+- `scripts/start.bat`
+
+**预估工时**: 0.5天
+
+### 2. SQLFlow服务集成优化
+**功能描述**: 后端服务额外启动sqlflow服务，使用本地jar包，端口从9600更改为19600
+
+**需求详情**:
+- 集成启动命令：`java -jar sqlflow_engine_lite/java_data_lineage-1.1.2.jar --server.host=localhost --server.port=19600`
+- 修改所有相关调用端口从9600变更为19600
+- 添加SQLFlow服务的健康检查和自动重启机制
+- 在启动脚本中同时管理Django和SQLFlow两个服务
+
+**技术实现**:
+- 修改 `hive_ide/settings.py` 中的SQLFLOW_CONFIG配置
+- 更新 `apps_lineage/lineage_service.py` 中的服务调用地址
+- 修改启动脚本，添加SQLFlow服务启动逻辑
+- 添加进程管理和监控
+
+**影响文件**:
+- `hive_ide/settings.py`
+- `apps_lineage/lineage_service.py`
+- `scripts/start.sh`
+- `test_sqlflow.py`
+
+**预估工时**: 1天
+
+### 3. GitLab集成增强
+**功能描述**: Git模块对接GitLab，支持内网私有GitLab，忽略HTTPS证书问题
+
+**需求详情**:
+- 支持GitLab地址、用户名和密码或Token认证
+- 处理内网私有GitLab的HTTPS证书验证问题
+- 修复当前添加GitLab地址时的错误
+- 支持SSL证书忽略选项
+- 增强错误处理和用户友好的提示信息
+
+**技术实现**:
+- 修改 `apps_git/git_service.py`，添加SSL验证跳过选项
+- 更新GitRepo模型，支持证书忽略配置
+- 修改前端GitView组件，添加SSL选项
+- 使用GitPython的相关配置来处理证书问题
+
+**影响文件**:
+- `apps_git/models.py`
+- `apps_git/git_service.py`
+- `apps_git/serializers.py`
+- `frontend/src/views/GitView.vue`
+
+**预估工时**: 2天
+
+### 4. 血缘图交互增强
 
 #### 1.1 最大化视图功能
 **功能描述**: 为血缘图添加全屏/最大化显示功能
@@ -227,10 +296,15 @@ class HiveConnectionView:
 - ✅ SQL编辑器集成
 
 ### Phase 2 (预计1周)  
+- ⏳ 数据库初始化优化
+- ⏳ SQLFlow服务集成优化
+- ⏳ GitLab集成增强
+
+### Phase 3 (预计1周)
 - ⏳ 血缘图最大化和重置功能
 - ⏳ 手动导入元数据功能
 
-### Phase 3 (预计1-2周)
+### Phase 4 (预计1-2周)
 - ⏳ 选择性Hive连接功能
 - ⏳ 性能优化和用户体验改进
 
