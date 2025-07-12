@@ -163,7 +163,7 @@ HIVE_CONFIG = {
 
 # SQL Lineage Service Configuration
 SQLFLOW_CONFIG = {
-    'url': 'http://localhost:9600/sqlflow/datalineage',
+    'url': 'http://localhost:19600/sqlflow/datalineage',
     'timeout': 30,
     'mock_mode': False,  # 使用真实的SQLFlow服务
 }

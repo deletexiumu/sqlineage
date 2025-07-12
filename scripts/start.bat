@@ -17,8 +17,38 @@ REM 停止现有服务
 echo 停止现有服务...
 taskkill /F /IM python.exe >nul 2>&1
 taskkill /F /IM node.exe >nul 2>&1
+taskkill /F /IM java.exe >nul 2>&1
 timeout /t 2 >nul
 
+REM 启动SQLFlow服务
+echo 🔧 启动SQLFlow服务...
+
+if not exist sqlflow_engine_lite\java_data_lineage-1.1.2.jar (
+    echo ❌ SQLFlow jar文件不存在
+    goto :start_backend
+)
+
+java -version >nul 2>&1
+if errorlevel 1 (
+    echo ❌ Java未安装，跳过SQLFlow服务启动
+    goto :start_backend
+)
+
+echo 启动SQLFlow引擎...
+start "SQLFlow Engine" java -jar sqlflow_engine_lite\java_data_lineage-1.1.2.jar --server.host=localhost --server.port=19600
+
+REM 等待SQLFlow服务启动
+timeout /t 5 >nul
+
+REM 检查SQLFlow服务状态
+netstat -an | findstr ":19600" >nul
+if errorlevel 1 (
+    echo ⚠️  SQLFlow服务启动失败，但继续启动其他服务
+) else (
+    echo ✅ SQLFlow服务启动成功
+)
+
+:start_backend
 REM 启动后端服务
 echo 🚀 启动后端服务...
 
@@ -37,14 +67,21 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM 检查数据库迁移
-echo 检查数据库迁移...
+REM 检查数据库状态
+echo 检查数据库状态...
 if exist manage.py (
-    python manage.py makemigrations --check --dry-run >nul 2>&1
-    if errorlevel 1 (
-        echo 执行数据库迁移...
+    if not exist db.sqlite3 (
+        echo 数据库文件不存在，自动创建...
         python manage.py makemigrations
         python manage.py migrate
+        echo 数据库创建完成
+    ) else (
+        python manage.py makemigrations --check --dry-run >nul 2>&1
+        if errorlevel 1 (
+            echo 执行数据库迁移...
+            python manage.py makemigrations
+            python manage.py migrate
+        )
     )
 )
 
@@ -99,6 +136,7 @@ cd ..
 echo.
 echo 🎉 HiicHiveIDE 启动完成！
 echo ================================
+echo 🔧 SQLFlow引擎: http://localhost:19600
 echo 📱 后端服务: http://localhost:8000
 echo 🔧 管理后台: http://localhost:8000/admin
 echo 📚 API文档: http://localhost:8000/api
@@ -134,6 +172,7 @@ exit /b 0
 
 :stop_services
 echo 🛑 停止 HiicHiveIDE 服务...
+taskkill /F /IM java.exe >nul 2>&1
 taskkill /F /IM python.exe >nul 2>&1
 taskkill /F /IM node.exe >nul 2>&1
 echo ✅ 所有服务已停止
@@ -143,6 +182,13 @@ exit /b 0
 :show_status
 echo 📊 服务状态检查
 echo ================================
+netstat -an | findstr ":19600" >nul
+if errorlevel 1 (
+    echo ❌ SQLFlow引擎 未运行 (端口 19600)
+) else (
+    echo ✅ SQLFlow引擎 正在运行 (端口 19600)
+)
+
 netstat -an | findstr ":8000" >nul
 if errorlevel 1 (
     echo ❌ Django后端 未运行 (端口 8000)

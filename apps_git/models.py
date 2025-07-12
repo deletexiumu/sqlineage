@@ -14,6 +14,7 @@ class GitRepo(models.Model):
     username = models.CharField(max_length=255)
     encrypted_password = models.TextField()
     branch = models.CharField(max_length=100, default='main')
+    ssl_verify = models.BooleanField(default=True, help_text='是否验证SSL证书，内网私有GitLab建议设为False')
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

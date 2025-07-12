@@ -22,8 +22,8 @@ class LineageService:
             'Content-Type': 'application/json;charset=UTF-8',
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
             'X-Requested-With': 'XMLHttpRequest',
-            'Origin': 'http://localhost:9600',
-            'Referer': 'http://localhost:9600/',
+            'Origin': 'http://localhost:19600',
+            'Referer': 'http://localhost:19600/',
         })
 
     def _init_session(self):

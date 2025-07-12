@@ -1,5 +1,8 @@
 <template>
-  <div class="column-lineage-graph">
+  <div 
+    ref="columnContainer" 
+    :class="['column-lineage-graph', { 'fullscreen': isFullscreen }]"
+  >
     <div v-if="loading" class="loading-container">
       <el-loading :loading="loading" text="正在渲染字段血缘图..." />
     </div>
@@ -25,6 +28,17 @@
           <span>字段血缘关系</span>
         </div>
         <div class="legend-actions">
+          <el-button 
+            size="small" 
+            @click="toggleFullscreen"
+            :icon="isFullscreen ? 'CloseFull' : 'FullScreen'"
+          >
+            {{ isFullscreen ? '退出全屏' : '全屏' }}
+          </el-button>
+          <el-button size="small" @click="resetGraphView">
+            <el-icon><RefreshLeft /></el-icon>
+            重置视角
+          </el-button>
           <el-button size="small" @click="downloadPNG">
             <el-icon><Download /></el-icon>
             下载PNG
@@ -60,7 +74,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Download } from '@element-plus/icons-vue'
+import { Download, RefreshLeft } from '@element-plus/icons-vue'
 
 interface ColumnGraphTable {
   name: string
@@ -91,7 +105,14 @@ const props = defineProps<{
 
 // Refs
 const graphContainer = ref<HTMLElement>()
+const columnContainer = ref<HTMLElement>()
 const highlightedElements = ref<Set<string>>(new Set())
+
+// 全屏状态
+const isFullscreen = ref(false)
+
+// 原始视图参数
+const originalViewBox = ref<string>('')
 
 // Computed
 const totalColumns = computed(() => {
@@ -112,12 +133,16 @@ const renderColumnGraph = () => {
   
   // 创建SVG
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  const viewBox = `0 0 ${containerWidth} ${containerHeight}`
   svg.setAttribute('width', containerWidth.toString())
   svg.setAttribute('height', containerHeight.toString())
-  svg.setAttribute('viewBox', `0 0 ${containerWidth} ${containerHeight}`)
+  svg.setAttribute('viewBox', viewBox)
   svg.style.background = '#fafafa'
   svg.style.border = '1px solid #d9d9d9'
   svg.style.borderRadius = '4px'
+  
+  // 保存原始viewBox以便重置
+  originalViewBox.value = viewBox
 
   // 定义箭头标记
   const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs')
@@ -329,6 +354,28 @@ const renderColumnGraph = () => {
   container.appendChild(svg)
 }
 
+// 重置图形视角
+const resetGraphView = () => {
+  const svg = graphContainer.value?.querySelector('svg')
+  if (!svg || !originalViewBox.value) {
+    ElMessage.warning('没有可重置的图形')
+    return
+  }
+
+  try {
+    // 重置viewBox到原始状态
+    svg.setAttribute('viewBox', originalViewBox.value)
+    
+    // 清除任何可能的变换
+    svg.style.transform = ''
+    
+    ElMessage.success('视角已重置')
+  } catch (error) {
+    console.error('重置视角失败:', error)
+    ElMessage.error('重置视角失败，请重试')
+  }
+}
+
 // 下载PNG功能
 const downloadPNG = () => {
   const svg = graphContainer.value?.querySelector('svg')
@@ -497,8 +544,75 @@ watch(() => props.columnGraph, () => {
   }
 })
 
+
+// 全屏功能
+const toggleFullscreen = async () => {
+  if (!columnContainer.value) return
+
+  try {
+    if (!isFullscreen.value) {
+      // 进入全屏
+      if (columnContainer.value.requestFullscreen) {
+        await columnContainer.value.requestFullscreen()
+      } else if ((columnContainer.value as any).webkitRequestFullscreen) {
+        await (columnContainer.value as any).webkitRequestFullscreen()
+      } else if ((columnContainer.value as any).msRequestFullscreen) {
+        await (columnContainer.value as any).msRequestFullscreen()
+      }
+      isFullscreen.value = true
+    } else {
+      // 退出全屏
+      if (document.exitFullscreen) {
+        await document.exitFullscreen()
+      } else if ((document as any).webkitExitFullscreen) {
+        await (document as any).webkitExitFullscreen()
+      } else if ((document as any).msExitFullscreen) {
+        await (document as any).msExitFullscreen()
+      }
+      isFullscreen.value = false
+    }
+    
+    // 延迟重新渲染图形以适应新尺寸
+    setTimeout(() => {
+      resizeGraph()
+    }, 300)
+  } catch (error) {
+    console.error('全屏切换失败:', error)
+    ElMessage.error('全屏功能不被支持或发生错误')
+  }
+}
+
+// 监听全屏状态变化
+const handleFullscreenChange = () => {
+  const isCurrentlyFullscreen = !!(
+    document.fullscreenElement ||
+    (document as any).webkitFullscreenElement ||
+    (document as any).msFullscreenElement
+  )
+  
+  if (isCurrentlyFullscreen !== isFullscreen.value) {
+    isFullscreen.value = isCurrentlyFullscreen
+    // 延迟重新渲染图形
+    setTimeout(() => {
+      resizeGraph()
+    }, 300)
+  }
+}
+
+// 处理ESC键退出全屏
+const handleEscKey = (event: KeyboardEvent) => {
+  if (event.key === 'Escape' && isFullscreen.value) {
+    toggleFullscreen()
+  }
+}
+
 onMounted(() => {
   window.addEventListener('resize', resizeGraph)
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
+  document.addEventListener('webkitfullscreenchange', handleFullscreenChange)
+  document.addEventListener('msfullscreenchange', handleFullscreenChange)
+  document.addEventListener('keydown', handleEscKey)
+  
   if (props.columnGraph && props.columnGraph.tables.length > 0) {
     nextTick(() => {
       renderColumnGraph()
@@ -508,6 +622,10 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', resizeGraph)
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  document.removeEventListener('webkitfullscreenchange', handleFullscreenChange)
+  document.removeEventListener('msfullscreenchange', handleFullscreenChange)
+  document.removeEventListener('keydown', handleEscKey)
 })
 </script>
 
@@ -637,5 +755,28 @@ onUnmounted(() => {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+/* 全屏模式样式 */
+.column-lineage-graph.fullscreen {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9999 !important;
+  background: white !important;
+  padding: 20px !important;
+  box-sizing: border-box !important;
+}
+
+.column-lineage-graph.fullscreen .graph-canvas {
+  height: calc(100vh - 200px) !important;
+}
+
+.column-lineage-graph.fullscreen .graph-container {
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 </style>

@@ -92,10 +92,27 @@ popd >/dev/null
 # ────────────────────────────────────────────────────────────
 # 数据库初始化
 # ────────────────────────────────────────────────────────────
-echo "🗄️  初始化数据库..."
-"$PY_BIN" manage.py makemigrations
-"$PY_BIN" manage.py migrate
-echo "✅ 数据库初始化完成"
+echo "🗄️  检查并初始化数据库..."
+
+# 检查数据库文件是否存在
+if [ ! -f "db.sqlite3" ]; then
+    echo "📄 数据库文件不存在，创建新数据库..."
+    # 执行数据库迁移
+    "$PY_BIN" manage.py makemigrations
+    "$PY_BIN" manage.py migrate
+    echo "✅ 数据库创建完成"
+else
+    echo "📄 数据库文件已存在，检查迁移状态..."
+    # 检查是否有待迁移的内容
+    if "$PY_BIN" manage.py makemigrations --check --dry-run >/dev/null 2>&1; then
+        echo "⚠️  检测到未迁移的更改，执行迁移..."
+        "$PY_BIN" manage.py makemigrations
+        "$PY_BIN" manage.py migrate
+        echo "✅ 数据库迁移完成"
+    else
+        echo "✅ 数据库状态正常，无需迁移"
+    fi
+fi
 
 # ────────────────────────────────────────────────────────────
 # 可选：创建超级用户

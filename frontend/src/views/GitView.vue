@@ -105,6 +105,16 @@
         <el-form-item label="分支">
           <el-input v-model="newRepo.branch" placeholder="main" />
         </el-form-item>
+        <el-form-item label="SSL验证">
+          <el-switch 
+            v-model="newRepo.ssl_verify" 
+            active-text="启用"
+            inactive-text="禁用"
+          />
+          <div style="font-size: 12px; color: #666; margin-top: 5px;">
+            内网私有GitLab建议禁用SSL验证
+          </div>
+        </el-form-item>
       </el-form>
       
       <template #footer>
@@ -136,6 +146,7 @@ const newRepo = ref({
   username: '',
   password: '',
   branch: 'main',
+  ssl_verify: true,
 })
 
 const loadRepos = async () => {
@@ -175,7 +186,7 @@ const addRepo = async () => {
     await gitAPI.createRepo(newRepo.value)
     ElMessage.success('仓库添加成功')
     showAddRepo.value = false
-    newRepo.value = { name: '', repo_url: '', username: '', password: '', branch: 'main' }
+    newRepo.value = { name: '', repo_url: '', username: '', password: '', branch: 'main', ssl_verify: true }
     await loadRepos()
   } catch (error) {
     console.error('Add repo error:', error)

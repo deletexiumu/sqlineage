@@ -114,17 +114,36 @@ if exist frontend (
 REM ────────────────────────────────────────────────────────────
 REM 数据库初始化
 REM ────────────────────────────────────────────────────────────
-echo 🗄️  初始化数据库...
+echo 🗄️  检查并初始化数据库...
 
 if exist manage.py (
-    python manage.py makemigrations
-    python manage.py migrate
-    if errorlevel 1 (
-        echo ❌ 数据库初始化失败
-        pause
-        exit /b 1
+    if not exist db.sqlite3 (
+        echo 📄 数据库文件不存在，创建新数据库...
+        python manage.py makemigrations
+        python manage.py migrate
+        if errorlevel 1 (
+            echo ❌ 数据库创建失败
+            pause
+            exit /b 1
+        )
+        echo ✅ 数据库创建完成
+    ) else (
+        echo 📄 数据库文件已存在，检查迁移状态...
+        python manage.py makemigrations --check --dry-run >nul 2>&1
+        if errorlevel 1 (
+            echo ⚠️  检测到未迁移的更改，执行迁移...
+            python manage.py makemigrations
+            python manage.py migrate
+            if errorlevel 1 (
+                echo ❌ 数据库迁移失败
+                pause
+                exit /b 1
+            )
+            echo ✅ 数据库迁移完成
+        ) else (
+            echo ✅ 数据库状态正常，无需迁移
+        )
     )
-    echo ✅ 数据库初始化完成
 ) else (
     echo ⚠️  manage.py 文件不存在，跳过数据库初始化
 )

@@ -1,5 +1,8 @@
 <template>
-  <div class="lineage-graph">
+  <div 
+    ref="lineageContainer" 
+    :class="['lineage-graph', { 'fullscreen': isFullscreen }]"
+  >
     <el-card>
       <template #header>
         <div class="card-header">
@@ -10,6 +13,14 @@
               <el-radio-button value="table">表查询</el-radio-button>
               <el-radio-button value="sql">SQL解析</el-radio-button>
             </el-radio-group>
+            <!-- 全屏按钮 -->
+            <el-button 
+              size="small" 
+              @click="toggleFullscreen"
+              :icon="isFullscreen ? 'CloseFull' : 'FullScreen'"
+            >
+              {{ isFullscreen ? '退出全屏' : '全屏显示' }}
+            </el-button>
           </div>
         </div>
       </template>
@@ -110,6 +121,10 @@
             </el-col>
             <el-col :span="6">
               <div class="graph-actions">
+                <el-button size="small" @click="resetGraphView">
+                  <el-icon><RefreshLeft /></el-icon>
+                  重置视角
+                </el-button>
                 <el-button size="small" @click="downloadGraphPNG">
                   <el-icon><Download /></el-icon>
                   下载图形
@@ -133,7 +148,7 @@ import { Graph } from '@antv/g6'
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { lineageAPI } from '@/services/api'
 import { ElMessage } from 'element-plus'
-import { Search, Share, DataBoard, Download } from '@element-plus/icons-vue'
+import { Search, Share, DataBoard, Download, RefreshLeft } from '@element-plus/icons-vue'
 import ColumnLineageGraph from './ColumnLineageGraph.vue'
 
 // 基础状态
@@ -145,6 +160,10 @@ const error = ref('')
 const graphData = ref<any>(null)
 const graph = ref<Graph | null>(null)
 const graphContainer = ref<HTMLElement>()
+const lineageContainer = ref<HTMLElement>()
+
+// 全屏状态
+const isFullscreen = ref(false)
 
 // SQL 解析相关状态
 const sqlCode = ref(`-- 示例SQL：分析血缘关系
@@ -438,6 +457,33 @@ const renderGraph = () => {
   })
 }
 
+// 重置图形视角
+const resetGraphView = () => {
+  if (!graph.value) {
+    ElMessage.warning('没有可重置的图形')
+    return
+  }
+
+  try {
+    // 重置缩放比例到1
+    graph.value.zoomTo(1, {
+      animate: true,
+      animateCfg: {
+        duration: 500,
+        easing: 'easeInOut'
+      }
+    })
+    
+    // 居中显示图形
+    graph.value.fitCenter(true)
+    
+    ElMessage.success('视角已重置')
+  } catch (error) {
+    console.error('重置视角失败:', error)
+    ElMessage.error('重置视角失败，请重试')
+  }
+}
+
 // 下载表级血缘图
 const downloadGraphPNG = () => {
   if (!graph.value) {
@@ -475,6 +521,87 @@ onUnmounted(() => {
     graph.value.destroy()
   }
   window.removeEventListener('resize', resizeGraph)
+  document.removeEventListener('keydown', handleEscKey)
+})
+
+// 全屏功能
+const toggleFullscreen = async () => {
+  if (!lineageContainer.value) return
+
+  try {
+    if (!isFullscreen.value) {
+      // 进入全屏
+      if (lineageContainer.value.requestFullscreen) {
+        await lineageContainer.value.requestFullscreen()
+      } else if ((lineageContainer.value as any).webkitRequestFullscreen) {
+        await (lineageContainer.value as any).webkitRequestFullscreen()
+      } else if ((lineageContainer.value as any).msRequestFullscreen) {
+        await (lineageContainer.value as any).msRequestFullscreen()
+      }
+      isFullscreen.value = true
+    } else {
+      // 退出全屏
+      if (document.exitFullscreen) {
+        await document.exitFullscreen()
+      } else if ((document as any).webkitExitFullscreen) {
+        await (document as any).webkitExitFullscreen()
+      } else if ((document as any).msExitFullscreen) {
+        await (document as any).msExitFullscreen()
+      }
+      isFullscreen.value = false
+    }
+    
+    // 延迟重新渲染图形以适应新尺寸
+    setTimeout(() => {
+      resizeGraph()
+    }, 300)
+  } catch (error) {
+    console.error('全屏切换失败:', error)
+    ElMessage.error('全屏功能不被支持或发生错误')
+  }
+}
+
+// 监听全屏状态变化
+const handleFullscreenChange = () => {
+  const isCurrentlyFullscreen = !!(
+    document.fullscreenElement ||
+    (document as any).webkitFullscreenElement ||
+    (document as any).msFullscreenElement
+  )
+  
+  if (isCurrentlyFullscreen !== isFullscreen.value) {
+    isFullscreen.value = isCurrentlyFullscreen
+    // 延迟重新渲染图形
+    setTimeout(() => {
+      resizeGraph()
+    }, 300)
+  }
+}
+
+// 处理ESC键退出全屏
+const handleEscKey = (event: KeyboardEvent) => {
+  if (event.key === 'Escape' && isFullscreen.value) {
+    toggleFullscreen()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('resize', resizeGraph)
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
+  document.addEventListener('webkitfullscreenchange', handleFullscreenChange)
+  document.addEventListener('msfullscreenchange', handleFullscreenChange)
+  document.addEventListener('keydown', handleEscKey)
+})
+
+onUnmounted(() => {
+  if (graph.value) {
+    graph.value.destroy()
+  }
+  window.removeEventListener('resize', resizeGraph)
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  document.removeEventListener('webkitfullscreenchange', handleFullscreenChange)
+  document.removeEventListener('msfullscreenchange', handleFullscreenChange)
+  document.removeEventListener('keydown', handleEscKey)
 })
 </script>
 
@@ -656,5 +783,47 @@ onUnmounted(() => {
   :deep(.el-radio-button) {
     flex: 1;
   }
+}
+
+/* 全屏模式样式 */
+.lineage-graph.fullscreen {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9999 !important;
+  background: white !important;
+  padding: 20px !important;
+  box-sizing: border-box !important;
+}
+
+.lineage-graph.fullscreen .graph-canvas {
+  height: calc(100vh - 250px) !important;
+}
+
+.lineage-graph.fullscreen .el-card {
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.lineage-graph.fullscreen .el-card__body {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.lineage-graph.fullscreen .graph-container {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.lineage-graph.fullscreen .column-graph-container {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 </style>
