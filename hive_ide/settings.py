@@ -161,12 +161,19 @@ HIVE_CONFIG = {
     'kerberos_service_name': 'hive',
 }
 
+# Hive Mock Mode (用于开发和测试)
+HIVE_MOCK_MODE = True
+
 # SQL Lineage Service Configuration
 SQLFLOW_CONFIG = {
-    'url': 'http://localhost:9600/sqlflow/datalineage',
+    'url': 'http://localhost:19600/sqlflow/datalineage',
     'timeout': 30,
     'mock_mode': False,  # 使用真实的SQLFlow服务
 }
 
 # Git Encryption Key (Generated for demo purposes)
-GIT_ENCRYPTION_KEY = 'fernet_key_would_be_generated_here_in_production'
+# 生成有效的Fernet密钥 - 32字节base64编码
+import base64
+import os
+_key = base64.urlsafe_b64encode(os.urandom(32))
+GIT_ENCRYPTION_KEY = _key.decode()

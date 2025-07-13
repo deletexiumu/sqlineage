@@ -2,8 +2,14 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Q, Count
+from django.http import HttpResponse
 from .models import HiveTable, BusinessMapping
-from .serializers import HiveTableSerializer, BusinessMappingSerializer, AutocompleteSerializer
+from .serializers import (
+    HiveTableSerializer, BusinessMappingSerializer, AutocompleteSerializer,
+    MetadataImportSerializer, HiveConnectionTestSerializer, SelectiveSyncSerializer
+)
+from .import_service import MetadataImportService
+from .hive_connection import get_hive_connection_manager
 
 
 class HiveTableViewSet(viewsets.ReadOnlyModelViewSet):
@@ -91,6 +97,175 @@ class HiveTableViewSet(viewsets.ReadOnlyModelViewSet):
             'lineage_count': lineage_count
         })
 
+    @action(detail=False, methods=['delete'])
+    def clear_all(self, request):
+        """清空所有元数据和血缘关系"""
+        try:
+            from apps_lineage.models import LineageRelation, ColumnLineage
+            
+            # 删除所有血缘关系
+            column_lineage_count = ColumnLineage.objects.count()
+            lineage_count = LineageRelation.objects.count()
+            ColumnLineage.objects.all().delete()
+            LineageRelation.objects.all().delete()
+            
+            # 删除所有业务映射
+            business_mapping_count = BusinessMapping.objects.count()
+            BusinessMapping.objects.all().delete()
+            
+            # 删除所有表元数据
+            table_count = HiveTable.objects.count()
+            HiveTable.objects.all().delete()
+            
+            return Response({
+                'success': True,
+                'message': '已清空所有元数据',
+                'deleted_counts': {
+                    'tables': table_count,
+                    'business_mappings': business_mapping_count,
+                    'lineage_relations': lineage_count,
+                    'column_lineages': column_lineage_count
+                }
+            })
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': f'清空失败: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['delete'])
+    def delete_database(self, request):
+        """删除指定数据库的所有元数据和血缘关系"""
+        database = request.query_params.get('database')
+        if not database:
+            return Response({
+                'success': False,
+                'error': '缺少database参数'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            from apps_lineage.models import LineageRelation, ColumnLineage
+            
+            # 获取该数据库的所有表
+            tables = HiveTable.objects.filter(database=database)
+            table_names = [f"{table.database}.{table.name}" for table in tables]
+            
+            if not table_names:
+                return Response({
+                    'success': False,
+                    'error': f'数据库 {database} 不存在或没有表'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # 删除相关的字段级血缘
+            column_lineage_count = ColumnLineage.objects.filter(
+                Q(source_table__in=table_names) | Q(target_table__in=table_names)
+            ).count()
+            ColumnLineage.objects.filter(
+                Q(source_table__in=table_names) | Q(target_table__in=table_names)
+            ).delete()
+            
+            # 删除相关的表级血缘关系
+            lineage_count = LineageRelation.objects.filter(
+                Q(source_table__in=table_names) | Q(target_table__in=table_names)
+            ).count()
+            LineageRelation.objects.filter(
+                Q(source_table__in=table_names) | Q(target_table__in=table_names)
+            ).delete()
+            
+            # 删除相关的业务映射
+            business_mapping_count = BusinessMapping.objects.filter(
+                table__in=tables
+            ).count()
+            BusinessMapping.objects.filter(table__in=tables).delete()
+            
+            # 删除表元数据
+            table_count = tables.count()
+            tables.delete()
+            
+            return Response({
+                'success': True,
+                'message': f'已删除数据库 {database} 的所有元数据',
+                'deleted_counts': {
+                    'tables': table_count,
+                    'business_mappings': business_mapping_count,
+                    'lineage_relations': lineage_count,
+                    'column_lineages': column_lineage_count
+                }
+            })
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': f'删除失败: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['delete'])
+    def delete_table(self, request):
+        """删除指定表的元数据和血缘关系"""
+        database = request.query_params.get('database')
+        table_name = request.query_params.get('table')
+        
+        if not database or not table_name:
+            return Response({
+                'success': False,
+                'error': '缺少database或table参数'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            from apps_lineage.models import LineageRelation, ColumnLineage
+            
+            # 查找表
+            try:
+                table = HiveTable.objects.get(database=database, name=table_name)
+            except HiveTable.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'error': f'表 {database}.{table_name} 不存在'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            full_table_name = f"{database}.{table_name}"
+            
+            # 删除相关的字段级血缘
+            column_lineage_count = ColumnLineage.objects.filter(
+                Q(source_table=full_table_name) | Q(target_table=full_table_name)
+            ).count()
+            ColumnLineage.objects.filter(
+                Q(source_table=full_table_name) | Q(target_table=full_table_name)
+            ).delete()
+            
+            # 删除相关的表级血缘关系
+            lineage_count = LineageRelation.objects.filter(
+                Q(source_table=full_table_name) | Q(target_table=full_table_name)
+            ).count()
+            LineageRelation.objects.filter(
+                Q(source_table=full_table_name) | Q(target_table=full_table_name)
+            ).delete()
+            
+            # 删除相关的业务映射
+            business_mapping_count = BusinessMapping.objects.filter(table=table).count()
+            BusinessMapping.objects.filter(table=table).delete()
+            
+            # 删除表元数据
+            table.delete()
+            
+            return Response({
+                'success': True,
+                'message': f'已删除表 {full_table_name} 的所有元数据',
+                'deleted_counts': {
+                    'tables': 1,
+                    'business_mappings': business_mapping_count,
+                    'lineage_relations': lineage_count,
+                    'column_lineages': column_lineage_count
+                }
+            })
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': f'删除失败: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class BusinessMappingViewSet(viewsets.ModelViewSet):
     queryset = BusinessMapping.objects.all()
@@ -108,3 +283,155 @@ class BusinessMappingViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(module_name=module)
         
         return queryset.order_by('application_name', 'module_name')
+
+
+class MetadataImportViewSet(viewsets.ViewSet):
+    """元数据导入视图集"""
+    
+    @action(detail=False, methods=['post'])
+    def import_metadata(self, request):
+        """导入元数据"""
+        serializer = MetadataImportSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        file = serializer.validated_data['file']
+        file_format = serializer.validated_data['file_format']
+        import_mode = serializer.validated_data['import_mode']
+        preview_only = serializer.validated_data['preview_only']
+        
+        import_service = MetadataImportService()
+        
+        try:
+            # 读取文件内容
+            if file_format == 'excel':
+                file_content = file.read()
+            else:
+                file_content = file.read().decode('utf-8')
+            
+            if preview_only:
+                # 仅预览
+                result = import_service.preview_import_data(file_content, file_format)
+                return Response({
+                    'preview': True,
+                    'result': result
+                })
+            else:
+                # 实际导入
+                result = import_service.import_metadata(file_content, file_format, import_mode)
+                return Response(result)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['get'])
+    def get_template(self, request):
+        """获取导入模板"""
+        format_type = request.query_params.get('format', 'json')
+        
+        import_service = MetadataImportService()
+        template = import_service.get_import_template(format_type)
+        
+        # 设置正确的文件扩展名
+        if format_type == 'excel':
+            filename = "metadata_template.xlsx"
+        elif format_type == 'csv':
+            filename = "metadata_template.csv"
+        else:
+            filename = "metadata_template.json"
+        
+        response = HttpResponse(
+            template['content'],
+            content_type=template['content_type']
+        )
+        
+        # 设置下载头部
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response['Access-Control-Expose-Headers'] = 'Content-Disposition'
+        
+        return response
+
+
+class HiveConnectionViewSet(viewsets.ViewSet):
+    """Hive连接管理视图集"""
+    
+    @action(detail=False, methods=['post'])
+    def test_connection(self, request):
+        """测试Hive连接"""
+        serializer = HiveConnectionTestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        hive_manager = get_hive_connection_manager()
+        result = hive_manager.test_connection(serializer.validated_data)
+        
+        if result['success']:
+            return Response(result)
+        else:
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'])
+    def get_databases(self, request):
+        """获取数据库列表"""
+        serializer = HiveConnectionTestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        hive_manager = get_hive_connection_manager()
+        databases = hive_manager.get_databases(serializer.validated_data)
+        
+        return Response({
+            'databases': databases
+        })
+    
+    @action(detail=False, methods=['post'])
+    def get_tables(self, request):
+        """获取数据库的表列表"""
+        serializer = HiveConnectionTestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        database = request.data.get('database')
+        if not database:
+            return Response({'error': '缺少database参数'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        hive_manager = get_hive_connection_manager()
+        tables = hive_manager.get_tables(serializer.validated_data, database)
+        
+        return Response({
+            'database': database,
+            'tables': tables
+        })
+    
+    @action(detail=False, methods=['post'])
+    def get_database_tree(self, request):
+        """获取数据库树形结构"""
+        serializer = HiveConnectionTestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        hive_manager = get_hive_connection_manager()
+        tree_data = hive_manager.get_database_tree(serializer.validated_data)
+        
+        return Response({
+            'tree_data': tree_data
+        })
+    
+    @action(detail=False, methods=['post'])
+    def selective_sync(self, request):
+        """选择性同步元数据"""
+        serializer = SelectiveSyncSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        connection_config = serializer.validated_data['connection_config']
+        selected_tables = serializer.validated_data['selected_tables']
+        sync_mode = serializer.validated_data['sync_mode']
+        
+        hive_manager = get_hive_connection_manager()
+        result = hive_manager.selective_sync(connection_config, selected_tables, sync_mode)
+        
+        return Response(result)

@@ -22,8 +22,8 @@ class LineageService:
             'Content-Type': 'application/json;charset=UTF-8',
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
             'X-Requested-With': 'XMLHttpRequest',
-            'Origin': 'http://localhost:9600',
-            'Referer': 'http://localhost:9600/',
+            'Origin': 'http://localhost:19600',
+            'Referer': 'http://localhost:19600/',
         })
 
     def _init_session(self):
@@ -43,6 +43,28 @@ class LineageService:
         except Exception as e:
             logger.warning(f"Session initialization failed: {str(e)}")
             # 继续执行，可能服务不需要会话
+
+    def _clean_name(self, name):
+        """
+        清理表名、字段名，去除反引号、空格等特殊字符，进行归一化处理
+        
+        Args:
+            name (str): 原始名称
+            
+        Returns:
+            str: 清理后的名称
+        """
+        if not name:
+            return name
+        
+        # 去除各种引号
+        cleaned = name.strip()
+        cleaned = cleaned.strip('`"\'[]')
+        
+        # 去除首尾空格
+        cleaned = cleaned.strip()
+        
+        return cleaned
 
     def parse_sql(self, sql_text):
         if not sql_text or not sql_text.strip():
@@ -127,28 +149,28 @@ class LineageService:
         # 提取CREATE TABLE
         create_matches = re.findall(create_pattern, sql_text, re.IGNORECASE)
         for match in create_matches:
-            table_name = match.strip('`"[]')
+            table_name = self._clean_name(match)
             target_tables.add(table_name)
             tables.add(table_name)
         
         # 提取INSERT TABLE
         insert_matches = re.findall(insert_pattern, sql_text, re.IGNORECASE)
         for match in insert_matches:
-            table_name = match.strip('`"[]')
+            table_name = self._clean_name(match)
             target_tables.add(table_name)
             tables.add(table_name)
         
         # 提取FROM TABLE
         from_matches = re.findall(from_pattern, sql_text, re.IGNORECASE)
         for match in from_matches:
-            table_name = match.strip('`"[]')
+            table_name = self._clean_name(match)
             source_tables.add(table_name)
             tables.add(table_name)
         
         # 提取JOIN TABLE
         join_matches = re.findall(join_pattern, sql_text, re.IGNORECASE)
         for match in join_matches:
-            table_name = match.strip('`"[]')
+            table_name = self._clean_name(match)
             source_tables.add(table_name)
             tables.add(table_name)
         
@@ -214,8 +236,11 @@ class LineageService:
                     
                     # Extract target table information
                     target_parent_name = target.get('parentName', '')
+                    target_parent_name = self._clean_name(target_parent_name)
                     if '.' in target_parent_name:
                         target_db, target_table = target_parent_name.split('.', 1)
+                        target_db = self._clean_name(target_db)
+                        target_table = self._clean_name(target_table)
                     else:
                         continue
                     
@@ -229,8 +254,11 @@ class LineageService:
                     # Process each source
                     for source in sources:
                         source_parent_name = source.get('parentName', '')
+                        source_parent_name = self._clean_name(source_parent_name)
                         if '.' in source_parent_name:
                             source_db, source_table = source_parent_name.split('.', 1)
+                            source_db = self._clean_name(source_db)
+                            source_table = self._clean_name(source_table)
                         else:
                             continue
                         
@@ -257,11 +285,24 @@ class LineageService:
                         target_column = target.get('column', '')
                         
                         if source_column and target_column:
-                            ColumnLineage.objects.get_or_create(
-                                relation=relation,
-                                source_column=source_column,
-                                target_column=target_column
-                            )
+                            # 清理字段名
+                            source_column_clean = self._clean_name(source_column)
+                            target_column_clean = self._clean_name(target_column)
+                            
+                            try:
+                                column_lineage, created = ColumnLineage.objects.get_or_create(
+                                    relation=relation,
+                                    source_column=source_column_clean,
+                                    target_column=target_column_clean
+                                )
+                                if created:
+                                    logger.info(f"Created column lineage: {source_column_clean} -> {target_column_clean}")
+                                else:
+                                    logger.debug(f"Column lineage already exists: {source_column_clean} -> {target_column_clean}")
+                            except Exception as col_e:
+                                logger.error(f"Failed to create column lineage {source_column_clean} -> {target_column_clean}: {str(col_e)}")
+                        else:
+                            logger.debug(f"Missing column info - source: '{source_column}', target: '{target_column}'")
                         
                         relations.append(relation)
                         
@@ -304,46 +345,56 @@ class LineageService:
                     # 处理目标表
                     target_table_name = target.get('parentName', '')
                     target_column = target.get('column', '')
+                    target_table_name_clean = None
+                    target_column_clean = None
                     
-                    if target_table_name and target_column:
-                        # 清理字段名（去掉反引号）
-                        target_column_clean = target_column.strip('`')
+                    if target_table_name:
+                        # 清理表名
+                        target_table_name_clean = self._clean_name(target_table_name)
                         
-                        if target_table_name not in tables_info:
-                            tables_info[target_table_name] = {
-                                'name': target_table_name,
+                        if target_table_name_clean not in tables_info:
+                            tables_info[target_table_name_clean] = {
+                                'name': target_table_name_clean,
                                 'type': 'target',
                                 'columns': set()
                             }
-                        tables_info[target_table_name]['columns'].add(target_column_clean)
+                    
+                    if target_column:
+                        # 清理字段名
+                        target_column_clean = self._clean_name(target_column)
+                        if target_table_name_clean:
+                            tables_info[target_table_name_clean]['columns'].add(target_column_clean)
                     
                     # 处理源表
                     for source in sources:
                         source_table_name = source.get('parentName', '')
                         source_column = source.get('column', '')
                         
-                        if source_table_name and source_column:
-                            # 清理字段名（去掉反引号）
-                            source_column_clean = source_column.strip('`')
+                        if source_table_name:
+                            # 清理表名和字段名
+                            source_table_name_clean = self._clean_name(source_table_name)
                             
-                            if source_table_name not in tables_info:
-                                tables_info[source_table_name] = {
-                                    'name': source_table_name,
+                            if source_table_name_clean not in tables_info:
+                                tables_info[source_table_name_clean] = {
+                                    'name': source_table_name_clean,
                                     'type': 'source',
                                     'columns': set()
                                 }
-                            tables_info[source_table_name]['columns'].add(source_column_clean)
-                            
-                            # 添加字段级关系
-                            if target_table_name and target_column and source_table_name and source_column:
-                                column_relationships.append({
-                                    'id': f"rel_{len(column_relationships)}",
-                                    'source_table': source_table_name,
-                                    'source_column': source_column_clean,
-                                    'target_table': target_table_name,
-                                    'target_column': target_column_clean,
-                                    'relation_type': relationship.get('effectType', 'insert')
-                                })
+                                
+                            if source_column:
+                                source_column_clean = self._clean_name(source_column)
+                                tables_info[source_table_name_clean]['columns'].add(source_column_clean)
+                                
+                                # 添加字段级关系（只有当源字段和目标字段都存在时）
+                                if target_table_name_clean and target_column_clean:
+                                    column_relationships.append({
+                                        'id': f"rel_{len(column_relationships)}",
+                                        'source_table': source_table_name_clean,
+                                        'source_column': source_column_clean,
+                                        'target_table': target_table_name_clean,
+                                        'target_column': target_column_clean,
+                                        'relation_type': relationship.get('effectType', 'insert')
+                                    })
                                 
                 except Exception as e:
                     logger.error(f"Error processing relationship for graph: {str(e)}")

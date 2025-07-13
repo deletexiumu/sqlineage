@@ -3,11 +3,39 @@ import { RouterView } from 'vue-router'
 import { ref, onMounted, onUnmounted } from 'vue'
 import { 
   House, Edit, Share, DataBoard, Folder, 
-  Menu as MenuIcon, Close 
+  Menu as MenuIcon, Close, Moon, Sunny 
 } from '@element-plus/icons-vue'
 
 const isMobile = ref(false)
 const mobileMenuVisible = ref(false)
+const isDark = ref(false)
+
+// 主题切换功能
+const toggleTheme = () => {
+  isDark.value = !isDark.value
+  const htmlElement = document.documentElement
+  
+  if (isDark.value) {
+    htmlElement.classList.add('dark')
+  } else {
+    htmlElement.classList.remove('dark')
+  }
+  
+  // 保存主题偏好到localStorage
+  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
+}
+
+// 初始化主题
+const initTheme = () => {
+  const savedTheme = localStorage.getItem('theme')
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+  
+  isDark.value = savedTheme ? savedTheme === 'dark' : prefersDark
+  
+  if (isDark.value) {
+    document.documentElement.classList.add('dark')
+  }
+}
 
 const checkScreenSize = () => {
   isMobile.value = window.innerWidth <= 768
@@ -21,6 +49,7 @@ const toggleMobileMenu = () => {
 }
 
 onMounted(() => {
+  initTheme()
   checkScreenSize()
   window.addEventListener('resize', checkScreenSize)
 })
@@ -45,9 +74,9 @@ onUnmounted(() => {
             :default-active="$route.path"
             mode="horizontal"
             router
-            background-color="#409eff"
-            text-color="#fff"
-            active-text-color="#ffd04b"
+            background-color="var(--header-bg)"
+            text-color="var(--header-text)"
+            active-text-color="#60a5fa"
             class="desktop-menu"
           >
             <el-menu-item index="/">
@@ -71,6 +100,18 @@ onUnmounted(() => {
               <span class="menu-text">Git仓库</span>
             </el-menu-item>
           </el-menu>
+          
+          <!-- 桌面端主题切换按钮 -->
+          <div v-if="!isMobile" class="theme-controls">
+            <el-button
+              type="primary"
+              :icon="isDark ? Sunny : Moon"
+              @click="toggleTheme"
+              circle
+              size="default"
+              plain
+            />
+          </div>
           
           <!-- 移动端菜单按钮 -->
           <el-button 
@@ -118,6 +159,20 @@ onUnmounted(() => {
             <el-icon><Folder /></el-icon>
             <span>Git仓库</span>
           </el-menu-item>
+          
+          <!-- 移动端主题切换 -->
+          <div class="mobile-theme-toggle">
+            <el-button
+              type="primary"
+              :icon="isDark ? Sunny : Moon"
+              @click="toggleTheme"
+              size="default"
+              plain
+              style="width: 100%; margin-top: 10px;"
+            >
+              {{ isDark ? '浅色模式' : '深色模式' }}
+            </el-button>
+          </div>
         </el-menu>
       </el-drawer>
       
@@ -129,11 +184,35 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+/* 深色模式变量 */
+:root {
+  --bg-color: #f8fafc;
+  --text-color: #1e293b;
+  --border-color: #e2e8f0;
+  --header-bg: #334155;
+  --header-text: #ffffff;
+  --card-bg: #ffffff;
+  --soft-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+html.dark {
+  --bg-color: #0f172a;
+  --text-color: #f1f5f9;
+  --border-color: #334155;
+  --header-bg: #1e293b;
+  --header-text: #f8fafc;
+  --card-bg: #1e293b;
+  --soft-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+}
+
 .app {
   height: 100vh;
   width: 100vw;
   display: flex;
   flex-direction: column;
+  background: linear-gradient(135deg, var(--bg-color) 0%, rgba(248, 250, 252, 0.8) 100%);
+  background-attachment: fixed;
+  color: var(--text-color);
 }
 
 .header {
@@ -149,10 +228,12 @@ onUnmounted(() => {
 }
 
 .logo h2 {
-  color: white;
+  color: var(--header-text);
   margin: 0;
   font-size: 20px;
   white-space: nowrap;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .desktop-menu {
@@ -163,6 +244,15 @@ onUnmounted(() => {
 
 .mobile-menu-toggle {
   display: none;
+}
+
+.theme-controls {
+  margin-left: auto;
+  margin-right: 20px;
+}
+
+.mobile-theme-toggle {
+  padding: 0 20px;
 }
 
 .main-content {
@@ -179,7 +269,7 @@ onUnmounted(() => {
 
 :deep(.el-header) {
   padding: 0 20px;
-  background-color: #409eff;
+  background-color: var(--header-bg);
   height: 60px !important;
   line-height: 60px;
   flex-shrink: 0;
@@ -187,8 +277,23 @@ onUnmounted(() => {
 
 :deep(.el-main) {
   padding: 0;
-  background-color: #f5f7fa;
+  background-color: var(--bg-color);
   overflow: auto;
+}
+
+/* 深色模式下的Element Plus组件样式调整 */
+html.dark {
+  :deep(.el-main) {
+    background-color: #1a1a1a;
+  }
+  
+  :deep(.el-menu--horizontal) {
+    background-color: transparent !important;
+  }
+  
+  :deep(.el-drawer__body) {
+    background-color: #1a1a1a;
+  }
 }
 
 :deep(.el-menu.el-menu--horizontal) {

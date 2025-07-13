@@ -54,7 +54,10 @@ export interface GitRepo {
   name: string
   repo_url: string
   username: string
+  auth_type: string
+  access_mode: string
   branch: string
+  ssl_verify: boolean
   is_active: boolean
   created_at: string
   updated_at: string
@@ -114,6 +117,61 @@ export const metadataAPI = {
   
   createBusinessMapping: (data: any) =>
     api.post('/metadata/business-mappings/', data),
+  
+  // 元数据导入
+  importMetadata: (formData: FormData) =>
+    api.post('/metadata/import/import_metadata/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    }),
+  
+  previewImport: (formData: FormData) =>
+    api.post('/metadata/import/import_metadata/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    }),
+  
+  getImportTemplate: (format: string) => {
+    // 根据格式设置不同的响应类型
+    if (format === 'excel') {
+      return api.get(`/metadata/import/get_template/?format=${format}`, {
+        responseType: 'blob'
+      })
+    } else {
+      // CSV和JSON返回文本内容
+      return api.get(`/metadata/import/get_template/?format=${format}`, {
+        responseType: 'text'
+      })
+    }
+  },
+  
+  // Hive连接管理
+  testHiveConnection: (config: any) =>
+    api.post('/metadata/hive-connection/test_connection/', config),
+  
+  getHiveDatabases: (config: any) =>
+    api.post('/metadata/hive-connection/get_databases/', config),
+  
+  getHiveTables: (config: any, database: string) =>
+    api.post('/metadata/hive-connection/get_tables/', { ...config, database }),
+  
+  getHiveDatabaseTree: (config: any) =>
+    api.post('/metadata/hive-connection/get_database_tree/', config),
+  
+  selectiveHiveSync: (data: any) =>
+    api.post('/metadata/hive-connection/selective_sync/', data),
+  
+  // 元数据删除功能
+  clearAllMetadata: () =>
+    api.delete('/metadata/tables/clear_all/'),
+  
+  deleteDatabase: (database: string) =>
+    api.delete('/metadata/tables/delete_database/', { params: { database } }),
+  
+  deleteTable: (database: string, table: string) =>
+    api.delete('/metadata/tables/delete_table/', { params: { database, table } }),
 }
 
 // Git API
@@ -133,6 +191,9 @@ export const gitAPI = {
   syncRepo: (id: number) =>
     api.post(`/git/repos/${id}/sync/`),
   
+  forceReclone: (id: number) =>
+    api.post(`/git/repos/${id}/force_reclone/`),
+  
   getRepoFiles: (id: number) =>
     api.get(`/git/repos/${id}/files/`),
   
@@ -147,6 +208,12 @@ export const gitAPI = {
   
   getCommits: (id: number, limit = 10) =>
     api.get(`/git/repos/${id}/commits/`, { params: { limit } }),
+  
+  getBranches: (id: number) =>
+    api.get(`/git/repos/${id}/branches/`),
+  
+  switchBranch: (id: number, branch: string) =>
+    api.post(`/git/repos/${id}/switch_branch/`, { branch }),
 }
 
 // Lineage API

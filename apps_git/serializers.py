@@ -16,13 +16,28 @@ class GitRepoSerializer(serializers.ModelSerializer):
     class Meta:
         model = GitRepo
         fields = [
-            'id', 'name', 'repo_url', 'username', 'password', 'branch', 
-            'is_active', 'created_at', 'updated_at', 'last_sync', 'user'
+            'id', 'name', 'repo_url', 'username', 'password', 'auth_type', 'branch', 
+            'ssl_verify', 'is_active', 'created_at', 'updated_at', 'last_sync', 'user'
         ]
         read_only_fields = ['created_at', 'updated_at', 'last_sync']
 
     def create(self, validated_data):
         password = validated_data.pop('password')
+        
+        # 检查是否已存在相同用户和仓库URL的记录
+        user = validated_data.get('user')
+        repo_url = validated_data.get('repo_url')
+        
+        if user and repo_url:
+            existing_repo = GitRepo.objects.filter(user=user, repo_url=repo_url).first()
+            if existing_repo:
+                # 如果已存在，更新现有记录而不是创建新记录
+                for attr, value in validated_data.items():
+                    setattr(existing_repo, attr, value)
+                existing_repo.set_password(password)
+                existing_repo.save()
+                return existing_repo
+        
         git_repo = GitRepo.objects.create(**validated_data)
         git_repo.set_password(password)
         git_repo.save()
