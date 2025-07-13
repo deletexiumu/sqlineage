@@ -3,8 +3,38 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>SQL编辑器</span>
+          <div class="header-left">
+            <span>SQL编辑器</span>
+            <!-- LSP状态指示器 -->
+            <el-tag
+              v-if="lspEnabled"
+              :type="lspStatus === 'connected' ? 'success' : lspStatus === 'error' ? 'danger' : 'info'"
+              size="small"
+              class="lsp-status"
+            >
+              <el-icon>
+                <Loading v-if="lspStatus === 'connecting'" />
+                <Check v-else-if="lspStatus === 'connected'" />
+                <Close v-else-if="lspStatus === 'error'" />
+                <Warning v-else />
+              </el-icon>
+              {{ 
+                lspStatus === 'connected' ? '智能提示已启用' : 
+                lspStatus === 'connecting' ? '连接中...' :
+                lspStatus === 'error' ? '智能提示异常' : '智能提示未连接'
+              }}
+            </el-tag>
+          </div>
           <div class="header-actions">
+            <el-button 
+              v-if="lspEnabled && lspStatus === 'connected'" 
+              size="small" 
+              @click="refreshLSPMetadata"
+              title="刷新智能提示元数据"
+            >
+              <el-icon><Refresh /></el-icon>
+              刷新元数据
+            </el-button>
             <el-button type="primary" @click="formatSql" :loading="formatting">
               一键格式化
             </el-button>
@@ -33,11 +63,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { metadataAPI } from '@/services/api'
 import { ElMessage } from 'element-plus'
 import { format } from 'sql-formatter'
+import { LSPClient, MonacoLSPIntegration } from '@/services/lspClient'
+import { Loading, Check, Close, Warning, Refresh } from '@element-plus/icons-vue'
 
 const sqlCode = ref(`-- 示例SQL
 CREATE TABLE if not exists dwt_capital.dim_investment_event_df
@@ -59,6 +91,12 @@ const formatting = ref(false)
 const copying = ref(false)
 const editor = ref<any>(null)
 
+// LSP客户端相关
+const lspClient = ref<LSPClient | null>(null)
+const lspIntegration = ref<MonacoLSPIntegration | null>(null)
+const lspEnabled = ref(true) // 可以通过配置控制是否启用LSP
+const lspStatus = ref<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected')
+
 const editorOptions = {
   automaticLayout: true,
   fontSize: 14,
@@ -72,11 +110,65 @@ const editorOptions = {
 
 const handleEditorMount = (editorInstance: any) => {
   editor.value = editorInstance
-  setupAutocompletion()
+  
+  // 根据配置决定使用LSP还是传统自动补全
+  if (lspEnabled.value) {
+    setupLSPIntegration()
+  } else {
+    setupAutocompletion()
+  }
 }
 
 const handleEditorChange = () => {
   // 编辑器内容改变时的处理
+}
+
+// 设置LSP集成
+const setupLSPIntegration = () => {
+  if (!editor.value) return
+  
+  try {
+    lspStatus.value = 'connecting'
+    
+    // 创建LSP客户端
+    lspClient.value = new LSPClient({
+      onDiagnostics: (diagnostics) => {
+        console.log('Received diagnostics:', diagnostics)
+        // 诊断信息会通过MonacoLSPIntegration自动显示
+      },
+      onError: (error) => {
+        console.error('LSP Error:', error)
+        lspStatus.value = 'error'
+        ElMessage.warning(`SQL智能提示服务异常: ${error}`)
+        
+        // 如果LSP失败，回退到传统自动补全
+        if (!lspIntegration.value) {
+          setupAutocompletion()
+        }
+      },
+      onConnectionChange: (connected) => {
+        lspStatus.value = connected ? 'connected' : 'disconnected'
+        if (connected) {
+          ElMessage.success('SQL智能提示服务已连接')
+          // 刷新元数据缓存
+          lspClient.value?.refreshMetadata()
+        }
+      }
+    })
+    
+    // 创建Monaco LSP集成
+    lspIntegration.value = new MonacoLSPIntegration(editor.value, lspClient.value)
+    
+    lspStatus.value = 'connected'
+    console.log('LSP integration setup completed')
+    
+  } catch (error) {
+    console.error('Failed to setup LSP integration:', error)
+    lspStatus.value = 'error'
+    
+    // 回退到传统自动补全
+    setupAutocompletion()
+  }
 }
 
 const setupAutocompletion = () => {
@@ -265,6 +357,19 @@ const clearEditor = () => {
   sqlCode.value = ''
 }
 
+// 刷新LSP元数据缓存
+const refreshLSPMetadata = async () => {
+  if (lspClient.value && lspStatus.value === 'connected') {
+    try {
+      await lspClient.value.refreshMetadata()
+      ElMessage.success('智能提示元数据已刷新')
+    } catch (error) {
+      console.error('Failed to refresh LSP metadata:', error)
+      ElMessage.error('刷新智能提示元数据失败')
+    }
+  }
+}
+
 onMounted(() => {
   // Load Monaco Editor
   import('monaco-editor/esm/vs/editor/editor.api').then(() => {
@@ -294,6 +399,19 @@ onMounted(() => {
     document.head.appendChild(style)
   })
 })
+
+onUnmounted(() => {
+  // 清理LSP资源
+  if (lspIntegration.value) {
+    lspIntegration.value.dispose()
+    lspIntegration.value = null
+  }
+  
+  if (lspClient.value) {
+    lspClient.value.dispose()
+    lspClient.value = null
+  }
+})
 </script>
 
 <style scoped>
@@ -308,6 +426,24 @@ onMounted(() => {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lsp-status {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lsp-status .el-icon {
+  font-size: 12px;
 }
 
 .header-actions {

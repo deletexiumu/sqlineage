@@ -40,10 +40,12 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
+    'channels',
     'apps_core',
     'apps_metadata',
     'apps_git',
     'apps_lineage',
+    'apps_lsp',
 ]
 
 MIDDLEWARE = [
@@ -75,6 +77,14 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'hive_ide.wsgi.application'
+ASGI_APPLICATION = 'hive_ide.asgi.application'
+
+# Channels Configuration
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}
 
 
 # Database

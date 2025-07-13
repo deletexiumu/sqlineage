@@ -48,7 +48,13 @@ HiicHiveIDE 是一个专为内部团队使用的轻量级数据血缘分析工�
 - ✏️ **SQL 编辑器增强**: 基于 Monaco Editor 的智能 SQL 编辑器，支持：
   - **一键格式化**: 智能SQL代码格式化，提升代码可读性
   - **一键复制**: 快速复制SQL代码到剪贴板
-  - **智能自动补全**: 基于SQL上下文的智能提示
+  - **LSP语言服务**: 基于Language Server Protocol的智能编程体验
+    - WebSocket实时通信，响应速度快
+    - WebWorker后台处理，不阻塞UI线程
+    - 实时语法检查和错误诊断
+    - 智能悬停提示，显示表和字段详细信息
+    - 上下文感知的自动补全，精准度极高
+  - **传统自动补全**: 基于REST API的智能提示（LSP备选方案）
     - 根据schema优先补全表名
     - 支持表别名.字段的智能补全
     - FROM/JOIN段优先显示表名，SELECT段优先显示字段名
@@ -89,15 +95,18 @@ HiicHiveIDE 是一个专为内部团队使用的轻量级数据血缘分析工�
 - **血缘解析**: 外部 SQL 解析服务（Gudu SQLFlow）
 - **Git 集成**: GitPython
 - **Hive 连接**: PyHive + 增强 Kerberos 认证（支持keytab文件、krb5.conf配置和自定义JAR包）
+- **LSP服务**: Django Channels + WebSocket（SQL语言服务协议）
 
 ### 前端架构
 - **框架**: Vue.js 3 + TypeScript + Composition API
 - **UI 组件**: Element Plus（完全响应式）
-- **代码编辑器**: Monaco Editor（支持语法高亮和自动补全）
+- **代码编辑器**: Monaco Editor + LSP客户端（智能编程体验）
+- **WebWorker**: 后台LSP通信处理，不阻塞UI线程
 - **图表可视化**: 
   - 表级血缘图: AntV G6
   - 字段级血缘图: 自定义SVG渲染引擎
 - **HTTP 客户端**: Axios
+- **WebSocket 客户端**: 实时LSP通信
 - **响应式布局**: 支持移动端和多尺寸屏幕
 
 ## 项目结构
@@ -120,12 +129,20 @@ HiicHiveIDE/
 │   ├── models.py         # LineageRelation, ColumnLineage 模型
 │   ├── lineage_service.py # 血缘分析服务
 │   └── views.py          # 血缘 API 视图
+├── apps_lsp/             # SQL Language Server Protocol 应用
+│   ├── sql_language_server.py # SQL语言服务器核心逻辑
+│   ├── consumers.py      # WebSocket消费者（LSP协议处理）
+│   └── routing.py        # WebSocket路由配置
 ├── frontend/             # Vue.js 前端应用
 │   ├── src/components/   # Vue 组件
 │   │   ├── LineageGraph.vue      # 血缘可视化主组件
-│   │   └── ColumnLineageGraph.vue # 字段级血缘图组件
+│   │   ├── ColumnLineageGraph.vue # 字段级血缘图组件
+│   │   └── SQLEditor.vue         # SQL编辑器组件（集成LSP）
 │   ├── src/views/       # 页面视图（完全响应式）
-│   └── src/services/    # API 服务层
+│   ├── src/services/    # API 服务层
+│   │   └── lspClient.ts          # LSP客户端服务
+│   └── src/workers/     # WebWorker
+│       └── sqlLspWorker.ts       # SQL LSP WebWorker
 └── requirements.txt     # Python 依赖
 ```
 
@@ -414,21 +431,36 @@ GET /api/metadata/tables/statistics/
 ### 4. SQL 编辑器增强功能
 
 前端提供基于 Monaco Editor 的智能 SQL 编辑器，支持：
+
+**核心功能：**
 - **一键格式化**: 使用sql-formatter库自动格式化SQL代码，提升可读性
 - **一键复制**: 快速复制SQL代码到剪贴板，支持降级兼容
-- **智能自动补全**: 基于SQL上下文的智能提示系统
-  - 分析当前光标所在的SQL语句段落（SELECT、FROM、JOIN等）
-  - 根据schema优先补全表名（如：`dwd_zlk.table_name`）
-  - 支持表别名.字段的智能补全（如：`t1.field_name`）
-  - FROM/JOIN段优先显示表名，SELECT段优先显示字段名
-  - 显示表备注和字段备注信息，建议框宽度优化
-- 语法高亮和错误检查
-- ~~实时 SQL 解析和血缘分析~~（已移除解析血缘按钮）
-- 双模式可视化：
+- **语法高亮**: 完整的SQL语法高亮支持
+
+**智能提示系统 (LSP架构)：**
+- **Language Server Protocol**: 基于LSP标准的语言服务，提供企业级编程体验
+  - **WebSocket实时通信**: 低延迟的双向通信，响应速度极快
+  - **WebWorker后台处理**: 不阻塞UI线程，确保编辑器流畅运行
+  - **上下文感知补全**: 根据SQL语法位置智能推荐表名或字段名
+  - **智能悬停提示**: 鼠标悬停显示表和字段的详细信息和注释
+  - **实时语法检查**: 自动检测SQL语法错误，提供错误诊断
+  - **元数据缓存**: 本地缓存元数据，支持一键刷新最新数据
+  - **连接状态指示**: 实时显示LSP服务连接状态和健康状况
+
+**传统自动补全（LSP备选方案）**:
+- **上下文分析**: 分析当前光标所在的SQL语句段落（SELECT、FROM、JOIN等）
+- **智能表名补全**: 根据schema优先补全表名（如：`dwd_zlk.table_name`）
+- **字段别名补全**: 支持表别名.字段的智能补全（如：`t1.field_name`）
+- **分段优化**: FROM/JOIN段优先显示表名，SELECT段优先显示字段名
+- **详细信息**: 显示表备注和字段备注信息，建议框宽度优化
+
+**血缘可视化功能**:
+- **双模式可视化**：
   - **表级血缘图**: 基于 AntV G6 的节点连线图，支持图形下载
   - **字段级血缘图**: 自定义 SVG 渲染，源表在左，目标表在右
   - **完整表名显示**: 显示完整的表名和字段名，不再省略
-  - **交互功能**: 鼠标悬停字段高亮相关连线和依赖字段
+- **交互功能**: 
+  - **悬停高亮**: 鼠标悬停字段高亮相关连线和依赖字段
   - **双击复制**: 双击表名或字段名自动复制到剪贴板
   - **全屏模式**: 支持血缘图全屏显示，ESC 键退出
   - **重置视角**: 一键重置图形缩放和位置到默认状态
