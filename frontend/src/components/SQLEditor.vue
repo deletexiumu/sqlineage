@@ -5,8 +5,11 @@
         <div class="card-header">
           <span>SQL编辑器</span>
           <div class="header-actions">
-            <el-button type="primary" @click="parseSql" :loading="parsing">
-              解析血缘
+            <el-button type="primary" @click="formatSql" :loading="formatting">
+              一键格式化
+            </el-button>
+            <el-button @click="copySql" :loading="copying">
+              一键复制
             </el-button>
             <el-button @click="clearEditor">清空</el-button>
           </div>
@@ -25,40 +28,6 @@
         />
       </div>
 
-      <div v-if="parseResult" class="parse-result">
-        <div class="result-header">
-          <h4>解析结果</h4>
-          <div class="result-actions">
-            <el-tag v-if="parseResult.status === 'success'" type="success">
-              找到 {{ parseResult.relations_count }} 个血缘关系
-            </el-tag>
-            <el-tag v-else type="danger">
-              {{ parseResult.message }}
-            </el-tag>
-            <el-button 
-              v-if="parseResult.status === 'success' && showLineageGraph" 
-              size="small" 
-              type="primary" 
-              @click="toggleLineageView"
-            >
-              {{ showLineageDetail ? '隐藏血缘图' : '显示血缘图' }}
-            </el-button>
-          </div>
-        </div>
-        
-        <!-- 血缘图展示区域 -->
-        <div v-if="parseResult.status === 'success' && showLineageGraph && showLineageDetail" class="lineage-display">
-          <ColumnLineageGraph 
-            v-if="parseResult.column_graph && parseResult.column_graph.tables.length > 0"
-            :column-graph="parseResult.column_graph" 
-            :loading="false" 
-            :error="''" 
-          />
-          <div v-else class="no-lineage">
-            <el-empty description="暂无字段级血缘关系可视化" />
-          </div>
-        </div>
-      </div>
     </el-card>
   </div>
 </template>
@@ -66,9 +35,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
-import { lineageAPI, metadataAPI } from '@/services/api'
+import { metadataAPI } from '@/services/api'
 import { ElMessage } from 'element-plus'
-import ColumnLineageGraph from './ColumnLineageGraph.vue'
+import { format } from 'sql-formatter'
 
 const sqlCode = ref(`-- 示例SQL
 CREATE TABLE if not exists dwt_capital.dim_investment_event_df
@@ -86,19 +55,9 @@ select logic_id                         as bk_investment_event_id,
        investment_event_name            as investment_event_name
 from dwd_zbk.dwd_zbk_investor_project_information;`)
 
-const parsing = ref(false)
-const parseResult = ref<any>(null)
+const formatting = ref(false)
+const copying = ref(false)
 const editor = ref<any>(null)
-const showLineageDetail = ref(false)
-
-// 检查是否有血缘图数据可以展示
-const showLineageGraph = computed(() => {
-  return parseResult.value && 
-         parseResult.value.status === 'success' && 
-         parseResult.value.column_graph && 
-         parseResult.value.column_graph.tables && 
-         parseResult.value.column_graph.tables.length > 0
-})
 
 const editorOptions = {
   automaticLayout: true,
@@ -117,7 +76,7 @@ const handleEditorMount = (editorInstance: any) => {
 }
 
 const handleEditorChange = () => {
-  parseResult.value = null
+  // 编辑器内容改变时的处理
 }
 
 const setupAutocompletion = () => {
@@ -138,13 +97,34 @@ const setupAutocompletion = () => {
       }
 
       try {
-        const response = await metadataAPI.getAutocomplete(word.word, 20)
+        // 分析SQL上下文
+        const sqlContext = analyzeSQLContext(model, position)
+        
+        // 构建API请求参数
+        const params: any = {
+          query: word.word,
+          limit: 20,
+          context: sqlContext.contextType,
+        }
+        
+        if (sqlContext.schema) {
+          params.schema = sqlContext.schema
+        }
+        
+        if (sqlContext.tableAlias && sqlContext.relatedTables.length > 0) {
+          params.table_alias = sqlContext.tableAlias
+          params.related_tables = sqlContext.relatedTables.join(',')
+        }
+
+        const response = await metadataAPI.getAutocomplete(params.query, params.limit, params)
         const suggestions = response.data.map((item: any) => ({
           label: item.label,
           kind: item.type === 'table' ? monaco.languages.CompletionItemKind.Class : monaco.languages.CompletionItemKind.Field,
           insertText: item.value,
-          detail: item.dataType || item.database,
+          detail: item.detail || (item.dataType || item.database),
+          documentation: item.documentation || (item.comment || ''),
           range: range,
+          sortText: item.type === 'table' ? '1' + item.label : '2' + item.label, // 表优先排序
         }))
 
         return { suggestions }
@@ -156,51 +136,162 @@ const setupAutocompletion = () => {
   })
 }
 
-const parseSql = async () => {
+// SQL上下文分析函数
+const analyzeSQLContext = (model: any, position: any) => {
+  const text = model.getValue()
+  const lines = text.split('\n')
+  const currentLine = lines[position.lineNumber - 1]
+  const beforeCursor = currentLine.substring(0, position.column - 1)
+  
+  // 获取当前光标前的完整SQL文本
+  const textBeforeCursor = lines.slice(0, position.lineNumber - 1).join('\n') + '\n' + beforeCursor
+  
+  // 分析当前所在的SQL语句段落
+  const context = {
+    contextType: 'mixed' as 'mixed' | 'table' | 'column',
+    schema: '',
+    tableAlias: '',
+    relatedTables: [] as string[],
+  }
+  
+  // 检查是否在FROM或JOIN语句中（应该补全表名）
+  const fromJoinPattern = /\b(from|join)\s+[\w.]*$/i
+  if (fromJoinPattern.test(beforeCursor)) {
+    context.contextType = 'table'
+  }
+  
+  // 检查是否在SELECT语句中（应该补全字段名）
+  const selectPattern = /\bselect\s+(?:[^,\s]+,\s*)*[\w.]*$/i
+  if (selectPattern.test(beforeCursor) && !fromJoinPattern.test(beforeCursor)) {
+    context.contextType = 'column'
+  }
+  
+  // 检查是否有表别名的字段引用（如 t1.）
+  const aliasFieldPattern = /(\w+)\.[\w]*$/
+  const aliasMatch = beforeCursor.match(aliasFieldPattern)
+  if (aliasMatch) {
+    context.contextType = 'column'
+    context.tableAlias = aliasMatch[1]
+    
+    // 查找该别名对应的表名
+    const aliasTablePattern = new RegExp(`\\b(?:from|join)\\s+([\\w.]+)\\s+(?:as\\s+)?${context.tableAlias}\\b`, 'i')
+    const tableMatch = textBeforeCursor.match(aliasTablePattern)
+    if (tableMatch) {
+      context.relatedTables = [tableMatch[1]]
+    }
+  }
+  
+  // 提取指定的schema（如 dwd_zlk.）
+  const schemaPattern = /\b(\w+)\.[\w]*$/
+  const schemaMatch = beforeCursor.match(schemaPattern)
+  if (schemaMatch && !aliasMatch) {
+    context.schema = schemaMatch[1]
+    // 检查这是否真的是schema而不是表别名
+    const isSchema = /\b(?:from|join)\s+\w+\.[\w]*$/i.test(beforeCursor)
+    if (isSchema) {
+      context.contextType = 'table'
+    }
+  }
+  
+  // 如果没有找到表别名的字段引用，但在SELECT中，尝试找到相关的表
+  if (context.contextType === 'column' && !context.tableAlias && !context.schema) {
+    // 查找FROM和JOIN中的所有表
+    const tablePattern = /\b(?:from|join)\s+([\w.]+)(?:\s+(?:as\s+)?(\w+))?\b/gi
+    let match
+    while ((match = tablePattern.exec(textBeforeCursor)) !== null) {
+      context.relatedTables.push(match[1])
+    }
+  }
+  
+  return context
+}
+
+const formatSql = async () => {
   if (!sqlCode.value.trim()) {
     ElMessage.warning('请输入SQL代码')
     return
   }
 
-  parsing.value = true
-  parseResult.value = null
+  formatting.value = true
 
   try {
-    const response = await lineageAPI.parseSQL(sqlCode.value)
-    parseResult.value = response.data
-    
-    if (response.data.status === 'success') {
-      ElMessage.success(`成功解析出 ${response.data.relations_count} 个血缘关系`)
-      // 如果有血缘图数据，自动显示血缘图
-      if (response.data.column_graph && response.data.column_graph.tables && response.data.column_graph.tables.length > 0) {
-        showLineageDetail.value = true
-      }
-    } else {
-      ElMessage.error('SQL解析失败')
-    }
+    const formattedSql = format(sqlCode.value, {
+      language: 'hive',
+      keywordCase: 'upper',
+      functionCase: 'upper',
+      linesBetweenQueries: 2
+    })
+    sqlCode.value = formattedSql
+    ElMessage.success('SQL格式化成功')
   } catch (error) {
-    console.error('Parse SQL error:', error)
-    ElMessage.error('解析失败，请检查SQL语法')
-    parseResult.value = { status: 'error', message: '解析服务错误' }
+    console.error('Format SQL error:', error)
+    ElMessage.error('SQL格式化失败，请检查语法')
   } finally {
-    parsing.value = false
+    formatting.value = false
+  }
+}
+
+const copySql = async () => {
+  if (!sqlCode.value.trim()) {
+    ElMessage.warning('没有可复制的内容')
+    return
+  }
+
+  copying.value = true
+
+  try {
+    await navigator.clipboard.writeText(sqlCode.value)
+    ElMessage.success('SQL代码已复制到剪贴板')
+  } catch (error) {
+    console.error('Copy SQL error:', error)
+    // 降级到传统方法
+    try {
+      const textArea = document.createElement('textarea')
+      textArea.value = sqlCode.value
+      document.body.appendChild(textArea)
+      textArea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textArea)
+      ElMessage.success('SQL代码已复制到剪贴板')
+    } catch (fallbackError) {
+      ElMessage.error('复制失败，请手动复制')
+    }
+  } finally {
+    copying.value = false
   }
 }
 
 const clearEditor = () => {
   sqlCode.value = ''
-  parseResult.value = null
-  showLineageDetail.value = false
-}
-
-const toggleLineageView = () => {
-  showLineageDetail.value = !showLineageDetail.value
 }
 
 onMounted(() => {
   // Load Monaco Editor
   import('monaco-editor/esm/vs/editor/editor.api').then(() => {
     console.log('Monaco Editor loaded')
+    // 自定义Monaco Editor建议框样式
+    const style = document.createElement('style')
+    style.textContent = `
+      .monaco-editor .suggest-widget {
+        width: 500px !important;
+        max-width: 500px !important;
+      }
+      .monaco-editor .suggest-widget .monaco-list .monaco-list-row {
+        height: auto !important;
+        min-height: 28px !important;
+      }
+      .monaco-editor .suggest-widget .details {
+        width: 200px !important;
+        max-width: 200px !important;
+      }
+      .monaco-editor .suggest-widget .monaco-list .monaco-list-row .suggest-icon {
+        width: 20px !important;
+      }
+      .monaco-editor .suggest-widget .monaco-list .monaco-list-row .contents {
+        padding-right: 10px !important;
+      }
+    `
+    document.head.appendChild(style)
   })
 })
 </script>
@@ -233,45 +324,6 @@ onMounted(() => {
   min-height: 400px;
 }
 
-.parse-result {
-  margin-top: 16px;
-  padding: 12px;
-  background-color: #f5f7fa;
-  border-radius: 4px;
-}
-
-.result-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.result-header h4 {
-  margin: 0;
-  color: #303133;
-}
-
-.result-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.lineage-display {
-  margin-top: 16px;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
-  background: #fff;
-}
-
-.no-lineage {
-  padding: 20px;
-  text-align: center;
-}
 
 /* 响应式设计 */
 @media (max-width: 768px) {

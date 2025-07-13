@@ -106,8 +106,8 @@ export const metadataAPI = {
   getDatabases: () =>
     api.get<string[]>('/metadata/tables/databases/'),
   
-  getAutocomplete: (query: string, limit = 10) =>
-    api.get('/metadata/tables/autocomplete/', { params: { query, limit } }),
+  getAutocomplete: (query: string, limit = 10, extraParams = {}) =>
+    api.get('/metadata/tables/autocomplete/', { params: { query, limit, ...extraParams } }),
   
   getStatistics: () =>
     api.get('/metadata/tables/statistics/'),

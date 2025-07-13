@@ -209,6 +209,7 @@ class LineageService:
 
     def extract_lineage_relations(self, parsed_data, sql_script_path=""):
         relations = []
+        skipped_tables = set()  # 记录跳过的表
         
         try:
             # 处理真实SQLFlow服务的响应格式
@@ -244,12 +245,16 @@ class LineageService:
                     else:
                         continue
                     
-                    # Get or create target table
-                    target_hive_table, _ = HiveTable.objects.get_or_create(
-                        name=target_table,
-                        database=target_db,
-                        defaults={'columns_json': '[]'}
-                    )
+                    # 只匹配现有的目标表，不创建新表
+                    try:
+                        target_hive_table = HiveTable.objects.get(
+                            name=target_table,
+                            database=target_db
+                        )
+                    except HiveTable.DoesNotExist:
+                        skipped_tables.add(f"{target_db}.{target_table}")
+                        logger.debug(f"目标表 {target_db}.{target_table} 在元数据中不存在，跳过血缘关系创建")
+                        continue
                     
                     # Process each source
                     for source in sources:
@@ -262,12 +267,16 @@ class LineageService:
                         else:
                             continue
                         
-                        # Get or create source table
-                        source_hive_table, _ = HiveTable.objects.get_or_create(
-                            name=source_table,
-                            database=source_db,
-                            defaults={'columns_json': '[]'}
-                        )
+                        # 只匹配现有的源表，不创建新表
+                        try:
+                            source_hive_table = HiveTable.objects.get(
+                                name=source_table,
+                                database=source_db
+                            )
+                        except HiveTable.DoesNotExist:
+                            skipped_tables.add(f"{source_db}.{source_table}")
+                            logger.debug(f"源表 {source_db}.{source_table} 在元数据中不存在，跳过血缘关系创建")
+                            continue
                         
                         # Create or update lineage relation
                         relation, created = LineageRelation.objects.get_or_create(
@@ -309,6 +318,12 @@ class LineageService:
                 except Exception as e:
                     logger.error(f"Error processing relationship: {str(e)}")
                     continue
+            
+            # 记录解析总结
+            if skipped_tables:
+                logger.info(f"Git仓库解析完成: 创建了{len(relations)}个血缘关系，跳过了{len(skipped_tables)}个不存在的表: {', '.join(sorted(skipped_tables))}")
+            else:
+                logger.info(f"Git仓库解析完成: 创建了{len(relations)}个血缘关系，所有表都在现有元数据中找到")
             
             return relations
             
