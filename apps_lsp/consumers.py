@@ -35,23 +35,26 @@ class SQLLanguageServerConsumer(AsyncWebsocketConsumer):
             params = message.get('params', {})
             request_id = message.get('id')
             
-            logger.debug(f"Received LSP message: {method}")
+            logger.info(f"Received LSP message: {method} (id: {request_id})")
             
             # 路由到相应的处理方法
             if method == 'textDocument/completion':
-                result = await self.handle_completion(params)
+                logger.info(f"Processing completion request...")
+                result = await self.handle_completion_async(params)
+                logger.info(f"Completion result: {len(result.get('items', []))} items")
             elif method == 'textDocument/hover':
-                result = await self.handle_hover(params)
+                result = await self.handle_hover_async(params)
             elif method == 'textDocument/publishDiagnostics':
-                result = await self.handle_diagnostics(params)
+                result = await self.handle_diagnostics_async(params)
             elif method == 'workspace/refreshMetadata':
-                result = await self.handle_refresh_metadata(params)
+                result = await self.handle_refresh_metadata_async(params)
             elif method == 'initialize':
                 result = await self.handle_initialize(params)
             else:
                 result = {"error": f"Unknown method: {method}"}
             
             # 发送响应
+            logger.info(f"Sending response for request {request_id}")
             await self.send_response(request_id, result)
             
         except Exception as e:
@@ -89,7 +92,10 @@ class SQLLanguageServerConsumer(AsyncWebsocketConsumer):
             }
         }
     
-    @database_sync_to_async
+    async def handle_completion_async(self, params):
+        """异步处理自动补全请求"""
+        return await database_sync_to_async(self.handle_completion)(params)
+    
     def handle_completion(self, params):
         """处理自动补全请求"""
         try:
@@ -113,7 +119,10 @@ class SQLLanguageServerConsumer(AsyncWebsocketConsumer):
             logger.error(f"Error in handle_completion: {str(e)}")
             return {"isIncomplete": False, "items": []}
     
-    @database_sync_to_async
+    async def handle_hover_async(self, params):
+        """异步处理悬停请求"""
+        return await database_sync_to_async(self.handle_hover)(params)
+    
     def handle_hover(self, params):
         """处理悬停信息请求"""
         try:
@@ -131,7 +140,10 @@ class SQLLanguageServerConsumer(AsyncWebsocketConsumer):
             logger.error(f"Error in handle_hover: {str(e)}")
             return None
     
-    @database_sync_to_async
+    async def handle_diagnostics_async(self, params):
+        """异步处理诊断请求"""
+        return await database_sync_to_async(self.handle_diagnostics)(params)
+    
     def handle_diagnostics(self, params):
         """处理诊断请求"""
         try:
@@ -149,7 +161,10 @@ class SQLLanguageServerConsumer(AsyncWebsocketConsumer):
             logger.error(f"Error in handle_diagnostics: {str(e)}")
             return {"uri": "", "diagnostics": []}
     
-    @database_sync_to_async
+    async def handle_refresh_metadata_async(self, params):
+        """异步处理元数据刷新请求"""
+        return await database_sync_to_async(self.handle_refresh_metadata)(params)
+    
     def handle_refresh_metadata(self, params):
         """处理元数据刷新请求"""
         try:

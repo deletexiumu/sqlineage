@@ -20,6 +20,8 @@ export class LSPClient {
   }>()
   private options: LSPClientOptions
   private isConnected = false
+  private lastCompletionTime = 0
+  private completionDebounceMs = 300
 
   constructor(options: LSPClientOptions = {}) {
     this.options = options
@@ -124,6 +126,13 @@ export class LSPClient {
    */
   public async getCompletions(documentText: string, position: Position): Promise<CompletionItem[]> {
     try {
+      // 防抖：避免过于频繁的请求
+      const now = Date.now()
+      if (now - this.lastCompletionTime < this.completionDebounceMs) {
+        return []
+      }
+      this.lastCompletionTime = now
+
       return await this.sendWorkerMessage('completion', {
         documentText,
         position
@@ -224,7 +233,12 @@ export class MonacoLSPIntegration {
     monaco.languages.registerCompletionItemProvider('sql', {
       triggerCharacters: ['.', ' ', '\n', '\t'],
       
-      provideCompletionItems: async (model: any, position: any) => {
+      provideCompletionItems: async (model: any, position: any, context: any, token: any) => {
+        // 检查取消令牌
+        if (token.isCancellationRequested) {
+          return { suggestions: [] }
+        }
+
         try {
           const documentText = model.getValue()
           const lspPosition = {
@@ -232,17 +246,42 @@ export class MonacoLSPIntegration {
             character: position.column - 1
           }
 
+          console.log('Monaco: Requesting completions from LSP')
           const completions = await this.lspClient.getCompletions(documentText, lspPosition)
           
-          return {
-            suggestions: completions.map((item: CompletionItem) => ({
+          // 再次检查取消令牌
+          if (token.isCancellationRequested) {
+            return { suggestions: [] }
+          }
+
+          console.log('Monaco: Converting completions', completions.length)
+          
+          // 优化：限制建议数量并快速转换
+          const suggestions = completions.slice(0, 10).map((item: CompletionItem) => {
+            // 计算正确的插入范围，避免重复文本
+            const word = model.getWordUntilPosition(position)
+            const range = {
+              startLineNumber: position.lineNumber,
+              endLineNumber: position.lineNumber,
+              startColumn: word.startColumn,
+              endColumn: word.endColumn
+            }
+            
+            return {
               label: item.label,
-              kind: this.convertLSPKindToMonaco(item.kind),
-              detail: item.detail,
-              documentation: item.documentation,
+              kind: this.convertLSPKindToMonaco(item.kind || 1),
+              detail: item.detail || '',
+              documentation: item.documentation ? { value: item.documentation } : undefined,
               insertText: item.insertText || item.label,
-              sortText: item.sortText || item.label
-            }))
+              sortText: item.sortText || item.label,
+              range: range
+            }
+          })
+
+          console.log('Monaco: Returning suggestions', suggestions.length)
+          return {
+            suggestions,
+            incomplete: completions.length > 10
           }
         } catch (error) {
           console.error('Completion provider error:', error)
@@ -291,19 +330,22 @@ export class MonacoLSPIntegration {
   }
 
   private setupDocumentChangeListener() {
-    // 监听文档变更，更新诊断信息
-    let timeoutId: NodeJS.Timeout | null = null
+    // 暂时禁用自动诊断更新以提升性能
+    // TODO: 在性能优化后重新启用
+    console.log('Document change listener setup (diagnostics disabled for performance)')
     
-    this.editor.onDidChangeModelContent(() => {
-      // 防抖处理
-      if (timeoutId) {
-        clearTimeout(timeoutId)
-      }
-      
-      timeoutId = setTimeout(async () => {
-        await this.updateDiagnostics()
-      }, 1000) // 1秒后更新诊断
-    })
+    // let timeoutId: NodeJS.Timeout | null = null
+    // 
+    // this.editor.onDidChangeModelContent(() => {
+    //   // 防抖处理
+    //   if (timeoutId) {
+    //     clearTimeout(timeoutId)
+    //   }
+    //   
+    //   timeoutId = setTimeout(async () => {
+    //     await this.updateDiagnostics()
+    //   }, 1000) // 1秒后更新诊断
+    // })
   }
 
   private async updateDiagnostics() {
