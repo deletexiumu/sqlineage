@@ -133,10 +133,19 @@ export const metadataAPI = {
       }
     }),
   
-  getImportTemplate: (format: string) =>
-    api.get(`/metadata/import/get_template/?format=${format}`, {
-      responseType: 'blob'
-    }),
+  getImportTemplate: (format: string) => {
+    // 根据格式设置不同的响应类型
+    if (format === 'excel') {
+      return api.get(`/metadata/import/get_template/?format=${format}`, {
+        responseType: 'blob'
+      })
+    } else {
+      // CSV和JSON返回文本内容
+      return api.get(`/metadata/import/get_template/?format=${format}`, {
+        responseType: 'text'
+      })
+    }
+  },
   
   // Hive连接管理
   testHiveConnection: (config: any) =>
@@ -153,6 +162,16 @@ export const metadataAPI = {
   
   selectiveHiveSync: (data: any) =>
     api.post('/metadata/hive-connection/selective_sync/', data),
+  
+  // 元数据删除功能
+  clearAllMetadata: () =>
+    api.delete('/metadata/tables/clear_all/'),
+  
+  deleteDatabase: (database: string) =>
+    api.delete('/metadata/tables/delete_database/', { params: { database } }),
+  
+  deleteTable: (database: string, table: string) =>
+    api.delete('/metadata/tables/delete_table/', { params: { database, table } }),
 }
 
 // Git API

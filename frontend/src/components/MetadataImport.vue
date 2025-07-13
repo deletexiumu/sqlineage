@@ -207,29 +207,48 @@ const downloadTemplate = async () => {
     
     // 根据格式设置正确的文件名和扩展名
     let filename = 'metadata_template.json'
+    let mimeType = 'application/json'
+    
     if (importForm.fileFormat === 'excel') {
       filename = 'metadata_template.xlsx'
+      mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     } else if (importForm.fileFormat === 'csv') {
       filename = 'metadata_template.csv'
+      mimeType = 'text/csv;charset=utf-8'
     } else if (importForm.fileFormat === 'json') {
       filename = 'metadata_template.json'
+      mimeType = 'application/json;charset=utf-8'
+    }
+    
+    // 根据不同的数据类型创建Blob
+    let blob: Blob
+    if (importForm.fileFormat === 'excel') {
+      // Excel文件是二进制数据，直接使用response.data
+      blob = new Blob([response.data], { type: mimeType })
+    } else {
+      // CSV和JSON是文本数据，需要确保正确的字符编码
+      const content = typeof response.data === 'string' ? response.data : JSON.stringify(response.data)
+      // 为CSV和JSON添加BOM头，确保中文字符正确显示
+      const BOM = '\uFEFF'
+      blob = new Blob([BOM + content], { type: mimeType })
     }
     
     // 创建下载链接
-    const blob = new Blob([response.data])
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     link.download = filename
-    document.body.appendChild(link) // 添加到DOM以确保兼容性
+    link.style.display = 'none'
+    document.body.appendChild(link)
     link.click()
-    document.body.removeChild(link) // 清理DOM
+    document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
     
     ElMessage.success(`${importForm.fileFormat.toUpperCase()}模板下载成功`)
-  } catch (error) {
+  } catch (error: any) {
     console.error('下载模板失败:', error)
-    ElMessage.error('模板下载失败，请检查网络连接')
+    const errorMessage = error?.response?.data?.error || error?.message || '模板下载失败，请检查网络连接'
+    ElMessage.error(errorMessage)
   }
 }
 

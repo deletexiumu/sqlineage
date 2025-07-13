@@ -8,7 +8,8 @@ HiicHiveIDE 是一个专为内部团队使用的轻量级数据血缘分析工�
 
 - 🔍 **智能血缘分析**: 实时解析 Hive SQL 语句，自动提取表级和字段级血缘关系
 - 📊 **元数据管理**: 自动爬取并管理 Hive 表和列信息，提供实时统计数据
-- 📁 **手动导入功能**: 支持JSON/CSV/Excel格式元数据文件导入，数据验证和预览
+- 🗑️ **元数据删除管理**: 支持全部清空、指定删除数据库/表及相关血缘关系，级联删除业务映射
+- 📁 **手动导入功能**: 支持JSON/CSV/Excel格式元数据文件导入，数据验证和预览，模板下载优化
 - 🔗 **选择性Hive连接**: 可视化选择需要同步的表，避免导入无用数据
 - 🔧 **Git 集成增强**: 
   - 支持 GitLab/GitHub，内网私有仓库
@@ -28,7 +29,7 @@ HiicHiveIDE 是一个专为内部团队使用的轻量级数据血缘分析工�
   - 完整表名显示，不再省略
 - 📥 **血缘图导出**: 支持 PNG/SVG 格式下载，便于文档制作和分享
 - 📱 **响应式设计**: 完美适配移动端和小屏幕设备
-- 🌙 **深色模式**: 支持深色/浅色主题切换，用户偏好自动保存
+- 🌙 **深色模式优化**: 重新设计配色方案，提升对比度和可读性，优化所有组件视觉效果
 - 💡 **界面优化**: 统一卡片高度、优化按钮布局，提升整体视觉体验
 - 🔐 **智能认证**: Git认证成功格式记录，避免重复尝试，提升同步效率
 - 👥 **用户管理**: 支持多用户独立配置 Git 仓库
@@ -46,7 +47,7 @@ HiicHiveIDE 是一个专为内部团队使用的轻量级数据血缘分析工�
 - **认证**: Django 内置用户系统 + Token 认证
 - **血缘解析**: 外部 SQL 解析服务（Gudu SQLFlow）
 - **Git 集成**: GitPython
-- **Hive 连接**: PyHive + Kerberos 认证
+- **Hive 连接**: PyHive + 增强 Kerberos 认证（支持keytab文件、krb5.conf配置和自定义JAR包）
 
 ### 前端架构
 - **框架**: Vue.js 3 + TypeScript + Composition API
@@ -176,6 +177,13 @@ HIVE_CONFIG = {
 }
 ```
 
+**增强的Kerberos认证支持**：
+- **Keytab文件上传**: 支持上传.keytab文件，用于Kerberos身份验证
+- **krb5.conf配置**: 支持上传Kerberos配置文件，自定义KDC和realm设置
+- **自定义JAR包**: 支持上传自定义Hive驱动JAR包，适配特定版本需求
+- **多用户配置**: 每个用户可以独立管理自己的认证配置和文件
+- **安全存储**: 认证文件按用户隔离存储，自动清理机制防止磁盘泄漏
+
 ### SQL 解析服务配置
 配置 SQLFlow 解析服务地址（脚本会自动启动本地服务）：
 
@@ -201,10 +209,20 @@ java -jar sqlflow_engine_lite/java_data_lineage-1.1.2.jar --server.host=localhos
 python manage.py crawl_metadata
 ```
 
+**元数据删除管理**
+- **全部清空**: 清空所有表信息、业务映射和血缘关系，支持一键重置
+- **删除数据库**: 删除指定数据库的所有表和相关血缘关系
+- **删除单表**: 删除指定表及其相关的血缘关系和业务映射
+- **级联删除**: 自动清理相关的字段级血缘和业务映射关系
+- **操作确认**: 所有删除操作都有确认对话框和详细的删除统计信息
+
 **API 端点**
 - `GET /api/metadata/tables/` - 获取表列表
 - `GET /api/metadata/tables/autocomplete/` - 自动补全接口
 - `GET /api/metadata/business-mappings/` - 业务映射管理
+- `DELETE /api/metadata/tables/clear_all/` - 清空所有元数据
+- `DELETE /api/metadata/tables/delete_database/` - 删除指定数据库
+- `DELETE /api/metadata/tables/delete_table/` - 删除指定表
 
 ### 2. Git 集成
 
@@ -347,12 +365,14 @@ GET /api/metadata/tables/statistics/
 
 ### 5. 界面体验优化
 
-**深色模式支持**
-- 支持深色/浅色主题自由切换
-- 用户偏好自动保存到本地存储
-- 桌面端右上角主题切换按钮
-- 移动端侧边栏主题切换选项
-- 完整的 Element Plus 组件深色模式适配
+**深色模式优化**
+- 重新设计配色方案，使用科学的对比度标准（WCAG 2.1）
+- 优化文字可读性，高对比度文字颜色（#f1f5f9, #f8fafc）
+- 深色背景采用蓝灰色调（#0f172a, #1e293b），更加护眼舒适
+- 完整的 Element Plus 组件深色模式适配和视觉一致性
+- 支持深色/浅色主题自由切换，用户偏好自动保存
+- 桌面端右上角主题切换按钮，移动端侧边栏主题切换选项
+- 所有交互状态（hover、focus）的优化视觉反馈
 
 **布局优化**
 - 首页功能卡片统一高度，提升视觉一致性
@@ -392,6 +412,11 @@ GET /api/metadata/tables/databases/          # 数据库列表
 GET /api/metadata/tables/autocomplete/       # 自动补全
 GET /api/metadata/tables/statistics/         # 统计数据（数据库、表、字段、血缘关系数量）
 POST /api/metadata/business-mappings/        # 创建业务映射
+
+# 元数据删除 API
+DELETE /api/metadata/tables/clear_all/       # 清空所有元数据和血缘关系
+DELETE /api/metadata/tables/delete_database/ # 删除指定数据库（?database=db_name）
+DELETE /api/metadata/tables/delete_table/    # 删除指定表（?database=db_name&table=table_name）
 ```
 
 #### Git API

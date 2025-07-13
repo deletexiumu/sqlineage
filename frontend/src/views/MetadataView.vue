@@ -56,6 +56,21 @@
               <el-icon><Refresh /></el-icon>
               刷新
             </el-button>
+            <el-dropdown @command="handleDeleteCommand">
+              <el-button type="danger">
+                <el-icon><Delete /></el-icon>
+                删除操作
+                <el-icon><ArrowDown /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="clearAll">清空所有元数据</el-dropdown-item>
+                  <el-dropdown-item command="deleteDatabase" :disabled="!selectedDatabase">
+                    删除数据库: {{ selectedDatabase || '请先选择数据库' }}
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
         </div>
       </template>
@@ -83,11 +98,16 @@
             {{ formatDate(scope.row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150">
+        <el-table-column label="操作" width="200">
           <template #default="scope">
-            <el-button type="primary" size="small" @click="viewLineage(scope.row.full_name)">
-              查看血缘
-            </el-button>
+            <div class="action-buttons">
+              <el-button type="primary" size="small" @click="viewLineage(scope.row.full_name)">
+                查看血缘
+              </el-button>
+              <el-button type="danger" size="small" @click="deleteTable(scope.row)" :loading="deletingTable">
+                删除
+              </el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -118,8 +138,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { metadataAPI, type HiveTable } from '@/services/api'
-import { ElMessage } from 'element-plus'
-import { Search, Refresh, Grid, Upload, Connection } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search, Refresh, Grid, Upload, Connection, Delete, ArrowDown } from '@element-plus/icons-vue'
 import MetadataImport from '../components/MetadataImport.vue'
 import HiveConnection from '../components/HiveConnection.vue'
 
@@ -133,6 +153,7 @@ const selectedDatabase = ref('')
 const searchText = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
+const deletingTable = ref(false)
 
 const filteredTables = computed(() => {
   let filtered = tables.value
@@ -193,6 +214,118 @@ const viewLineage = (tableName: string) => {
 
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleString()
+}
+
+// 删除操作处理
+const handleDeleteCommand = (command: string) => {
+  if (command === 'clearAll') {
+    clearAllMetadata()
+  } else if (command === 'deleteDatabase') {
+    deleteDatabase()
+  }
+}
+
+const clearAllMetadata = async () => {
+  ElMessageBox.confirm(
+    '确定要清空所有元数据吗？这将删除所有表信息、业务映射和血缘关系，操作不可逆！',
+    '清空所有元数据',
+    {
+      confirmButtonText: '确定清空',
+      cancelButtonText: '取消',
+      type: 'warning',
+      dangerouslyUseHTMLString: false,
+    }
+  ).then(async () => {
+    try {
+      loading.value = true
+      const response = await metadataAPI.clearAllMetadata()
+      
+      if (response.data.success) {
+        ElMessage.success(`清空成功！删除了 ${response.data.deleted_counts.tables} 个表，${response.data.deleted_counts.lineage_relations} 条血缘关系`)
+        await loadDatabases()
+        await loadTables()
+      } else {
+        ElMessage.error(response.data.error || '清空失败')
+      }
+    } catch (error: any) {
+      console.error('Clear all metadata error:', error)
+      ElMessage.error(error?.response?.data?.error || '清空失败')
+    } finally {
+      loading.value = false
+    }
+  }).catch(() => {
+    ElMessage.info('已取消清空操作')
+  })
+}
+
+const deleteDatabase = async () => {
+  if (!selectedDatabase.value) {
+    ElMessage.warning('请先选择要删除的数据库')
+    return
+  }
+
+  ElMessageBox.confirm(
+    `确定要删除数据库 "${selectedDatabase.value}" 的所有表信息和相关血缘关系吗？操作不可逆！`,
+    '删除数据库',
+    {
+      confirmButtonText: '确定删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    }
+  ).then(async () => {
+    try {
+      loading.value = true
+      const response = await metadataAPI.deleteDatabase(selectedDatabase.value)
+      
+      if (response.data.success) {
+        ElMessage.success(`删除成功！删除了 ${response.data.deleted_counts.tables} 个表，${response.data.deleted_counts.lineage_relations} 条血缘关系`)
+        selectedDatabase.value = ''
+        await loadDatabases()
+        await loadTables()
+      } else {
+        ElMessage.error(response.data.error || '删除失败')
+      }
+    } catch (error: any) {
+      console.error('Delete database error:', error)
+      ElMessage.error(error?.response?.data?.error || '删除失败')
+    } finally {
+      loading.value = false
+    }
+  }).catch(() => {
+    ElMessage.info('已取消删除操作')
+  })
+}
+
+const deleteTable = async (table: HiveTable) => {
+  ElMessageBox.confirm(
+    `确定要删除表 "${table.full_name}" 和相关血缘关系吗？操作不可逆！`,
+    '删除表',
+    {
+      confirmButtonText: '确定删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    }
+  ).then(async () => {
+    try {
+      deletingTable.value = true
+      const response = await metadataAPI.deleteTable(table.database, table.name)
+      
+      if (response.data.success) {
+        ElMessage.success(`删除成功！删除了表和 ${response.data.deleted_counts.lineage_relations} 条血缘关系`)
+        await loadTables()
+        await loadDatabases()
+      } else {
+        ElMessage.error(response.data.error || '删除失败')
+      }
+    } catch (error: any) {
+      console.error('Delete table error:', error)
+      ElMessage.error(error?.response?.data?.error || '删除失败')
+    } finally {
+      deletingTable.value = false
+    }
+  }).catch(() => {
+    ElMessage.info('已取消删除操作')
+  })
 }
 
 onMounted(() => {
@@ -258,6 +391,12 @@ onMounted(() => {
 .more-columns {
   color: #909399;
   font-size: 12px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* 响应式设计 */

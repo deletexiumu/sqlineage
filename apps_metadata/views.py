@@ -97,6 +97,175 @@ class HiveTableViewSet(viewsets.ReadOnlyModelViewSet):
             'lineage_count': lineage_count
         })
 
+    @action(detail=False, methods=['delete'])
+    def clear_all(self, request):
+        """清空所有元数据和血缘关系"""
+        try:
+            from apps_lineage.models import LineageRelation, ColumnLineage
+            
+            # 删除所有血缘关系
+            column_lineage_count = ColumnLineage.objects.count()
+            lineage_count = LineageRelation.objects.count()
+            ColumnLineage.objects.all().delete()
+            LineageRelation.objects.all().delete()
+            
+            # 删除所有业务映射
+            business_mapping_count = BusinessMapping.objects.count()
+            BusinessMapping.objects.all().delete()
+            
+            # 删除所有表元数据
+            table_count = HiveTable.objects.count()
+            HiveTable.objects.all().delete()
+            
+            return Response({
+                'success': True,
+                'message': '已清空所有元数据',
+                'deleted_counts': {
+                    'tables': table_count,
+                    'business_mappings': business_mapping_count,
+                    'lineage_relations': lineage_count,
+                    'column_lineages': column_lineage_count
+                }
+            })
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': f'清空失败: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['delete'])
+    def delete_database(self, request):
+        """删除指定数据库的所有元数据和血缘关系"""
+        database = request.query_params.get('database')
+        if not database:
+            return Response({
+                'success': False,
+                'error': '缺少database参数'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            from apps_lineage.models import LineageRelation, ColumnLineage
+            
+            # 获取该数据库的所有表
+            tables = HiveTable.objects.filter(database=database)
+            table_names = [f"{table.database}.{table.name}" for table in tables]
+            
+            if not table_names:
+                return Response({
+                    'success': False,
+                    'error': f'数据库 {database} 不存在或没有表'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # 删除相关的字段级血缘
+            column_lineage_count = ColumnLineage.objects.filter(
+                Q(source_table__in=table_names) | Q(target_table__in=table_names)
+            ).count()
+            ColumnLineage.objects.filter(
+                Q(source_table__in=table_names) | Q(target_table__in=table_names)
+            ).delete()
+            
+            # 删除相关的表级血缘关系
+            lineage_count = LineageRelation.objects.filter(
+                Q(source_table__in=table_names) | Q(target_table__in=table_names)
+            ).count()
+            LineageRelation.objects.filter(
+                Q(source_table__in=table_names) | Q(target_table__in=table_names)
+            ).delete()
+            
+            # 删除相关的业务映射
+            business_mapping_count = BusinessMapping.objects.filter(
+                table__in=tables
+            ).count()
+            BusinessMapping.objects.filter(table__in=tables).delete()
+            
+            # 删除表元数据
+            table_count = tables.count()
+            tables.delete()
+            
+            return Response({
+                'success': True,
+                'message': f'已删除数据库 {database} 的所有元数据',
+                'deleted_counts': {
+                    'tables': table_count,
+                    'business_mappings': business_mapping_count,
+                    'lineage_relations': lineage_count,
+                    'column_lineages': column_lineage_count
+                }
+            })
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': f'删除失败: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['delete'])
+    def delete_table(self, request):
+        """删除指定表的元数据和血缘关系"""
+        database = request.query_params.get('database')
+        table_name = request.query_params.get('table')
+        
+        if not database or not table_name:
+            return Response({
+                'success': False,
+                'error': '缺少database或table参数'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            from apps_lineage.models import LineageRelation, ColumnLineage
+            
+            # 查找表
+            try:
+                table = HiveTable.objects.get(database=database, name=table_name)
+            except HiveTable.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'error': f'表 {database}.{table_name} 不存在'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            full_table_name = f"{database}.{table_name}"
+            
+            # 删除相关的字段级血缘
+            column_lineage_count = ColumnLineage.objects.filter(
+                Q(source_table=full_table_name) | Q(target_table=full_table_name)
+            ).count()
+            ColumnLineage.objects.filter(
+                Q(source_table=full_table_name) | Q(target_table=full_table_name)
+            ).delete()
+            
+            # 删除相关的表级血缘关系
+            lineage_count = LineageRelation.objects.filter(
+                Q(source_table=full_table_name) | Q(target_table=full_table_name)
+            ).count()
+            LineageRelation.objects.filter(
+                Q(source_table=full_table_name) | Q(target_table=full_table_name)
+            ).delete()
+            
+            # 删除相关的业务映射
+            business_mapping_count = BusinessMapping.objects.filter(table=table).count()
+            BusinessMapping.objects.filter(table=table).delete()
+            
+            # 删除表元数据
+            table.delete()
+            
+            return Response({
+                'success': True,
+                'message': f'已删除表 {full_table_name} 的所有元数据',
+                'deleted_counts': {
+                    'tables': 1,
+                    'business_mappings': business_mapping_count,
+                    'lineage_relations': lineage_count,
+                    'column_lineages': column_lineage_count
+                }
+            })
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': f'删除失败: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class BusinessMappingViewSet(viewsets.ModelViewSet):
     queryset = BusinessMapping.objects.all()
