@@ -1,5 +1,6 @@
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db.models import Q, Count
 from django.http import HttpResponse
@@ -159,6 +160,7 @@ class HiveTableViewSet(viewsets.ReadOnlyModelViewSet):
         })
 
     @action(detail=False, methods=['delete'])
+    @permission_classes([IsAuthenticated])
     def clear_all(self, request):
         """清空所有元数据和血缘关系"""
         try:
@@ -196,6 +198,7 @@ class HiveTableViewSet(viewsets.ReadOnlyModelViewSet):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['delete'])
+    @permission_classes([IsAuthenticated])
     def delete_database(self, request):
         """删除指定数据库的所有元数据和血缘关系"""
         database = request.query_params.get('database')
@@ -262,6 +265,7 @@ class HiveTableViewSet(viewsets.ReadOnlyModelViewSet):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['delete'])
+    @permission_classes([IsAuthenticated])
     def delete_table(self, request):
         """删除指定表的元数据和血缘关系"""
         database = request.query_params.get('database')
@@ -348,6 +352,7 @@ class BusinessMappingViewSet(viewsets.ModelViewSet):
 
 class MetadataImportViewSet(viewsets.ViewSet):
     """元数据导入视图集"""
+    permission_classes = [IsAuthenticated]
     
     @action(detail=False, methods=['post'])
     def import_metadata(self, request):
@@ -418,6 +423,7 @@ class MetadataImportViewSet(viewsets.ViewSet):
 
 class HiveConnectionViewSet(viewsets.ViewSet):
     """Hive连接管理视图集"""
+    permission_classes = [IsAuthenticated]
     
     @action(detail=False, methods=['post'])
     def test_connection(self, request):

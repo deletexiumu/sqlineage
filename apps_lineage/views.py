@@ -85,6 +85,55 @@ class LineageRelationViewSet(viewsets.ReadOnlyModelViewSet):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['post'])
+    def parse_sql_preview(self, request):
+        """SQL解析预览模式 - 只返回可视化数据，不保存到数据库"""
+        try:
+            serializer = ParseSQLSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response({
+                    'status': 'error',
+                    'message': 'Invalid request data',
+                    'errors': serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            sql_text = serializer.validated_data['sql_text']
+            file_path = serializer.validated_data.get('file_path', '')
+            
+            lineage_service = LineageService()
+            
+            # 解析SQL获取原始数据，但不保存到数据库
+            parsed_data = lineage_service.parse_sql(sql_text)
+            if not parsed_data:
+                return Response({
+                    'status': 'error',
+                    'message': 'Failed to parse SQL'
+                })
+            
+            # 获取字段级血缘图形化数据
+            column_graph = lineage_service.get_column_lineage_graph(parsed_data)
+            
+            # 生成表级血缘关系数据（仅用于展示，不保存）
+            preview_relations = lineage_service.extract_lineage_relations_preview(parsed_data, file_path)
+            
+            return Response({
+                'status': 'success',
+                'mode': 'preview',
+                'relations_count': len(preview_relations),
+                'relations': preview_relations,
+                'column_graph': column_graph,
+                'note': '预览模式：解析结果未保存到数据库'
+            })
+                
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"SQL preview parsing error: {str(e)}", exc_info=True)
+            return Response({
+                'status': 'error',
+                'message': f'Preview parsing error: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
     def parse_repo(self, request, repo_id=None):
         if not repo_id:
             repo_id = request.data.get('repo_id')
@@ -105,6 +154,68 @@ class LineageRelationViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({
                 'status': 'success',
                 'job': serializer.data
+            })
+            
+        except Exception as e:
+            return Response(
+                {'error': str(e)}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @action(detail=False, methods=['post'])
+    def parse_repo_incremental(self, request, repo_id=None):
+        """增量解析仓库 - 只解析变更的文件"""
+        if not repo_id:
+            repo_id = request.data.get('repo_id')
+        
+        if not repo_id:
+            return Response(
+                {'error': 'repo_id is required'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            git_repo = get_object_or_404(GitRepo, id=repo_id)
+            
+            lineage_service = LineageService()
+            job = lineage_service.incremental_parse_repository(git_repo)
+            
+            serializer = LineageParseJobSerializer(job)
+            return Response({
+                'status': 'success',
+                'job': serializer.data,
+                'parse_type': 'incremental'
+            })
+            
+        except Exception as e:
+            return Response(
+                {'error': str(e)}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @action(detail=False, methods=['post'])
+    def parse_repo_full(self, request, repo_id=None):
+        """全量覆盖解析仓库 - 清除所有血缘关系，重新解析"""
+        if not repo_id:
+            repo_id = request.data.get('repo_id')
+        
+        if not repo_id:
+            return Response(
+                {'error': 'repo_id is required'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            git_repo = get_object_or_404(GitRepo, id=repo_id)
+            
+            lineage_service = LineageService()
+            job = lineage_service.full_parse_repository(git_repo)
+            
+            serializer = LineageParseJobSerializer(job)
+            return Response({
+                'status': 'success',
+                'job': serializer.data,
+                'parse_type': 'full_overwrite'
             })
             
         except Exception as e:

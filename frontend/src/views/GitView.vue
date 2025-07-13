@@ -52,9 +52,26 @@
                     </el-button>
                   </div>
                   <div class="button-row">
-                    <el-button size="small" @click="parseRepo(scope.row)" :loading="parsingRepos.has(scope.row.id)">
-                      解析
-                    </el-button>
+                    <el-dropdown @command="(command) => handleParseCommand(command, scope.row)" trigger="click">
+                      <el-button size="small" :loading="parsingRepos.has(scope.row.id)">
+                        解析
+                        <el-icon><ArrowDown /></el-icon>
+                      </el-button>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item command="incremental">
+                            <el-icon><RefreshRight /></el-icon>
+                            增量解析
+                            <div class="parse-desc">只解析变更文件</div>
+                          </el-dropdown-item>
+                          <el-dropdown-item command="full" divided>
+                            <el-icon><Refresh /></el-icon>
+                            全量覆盖解析
+                            <div class="parse-desc">清除旧数据，重新解析</div>
+                          </el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
                     <el-button size="small" type="danger" @click="deleteRepo(scope.row)" :loading="deletingRepos.has(scope.row.id)">
                       删除
                     </el-button>
@@ -230,7 +247,7 @@
 import { ref, onMounted } from 'vue'
 import { gitAPI, lineageAPI, type GitRepo, type LineageParseJob } from '@/services/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh } from '@element-plus/icons-vue'
+import { Plus, Refresh, ArrowDown, RefreshRight } from '@element-plus/icons-vue'
 
 const loading = ref(false)
 const jobsLoading = ref(false)
@@ -356,18 +373,54 @@ const syncRepo = async (repo: GitRepo) => {
   }
 }
 
-const parseRepo = async (repo: GitRepo) => {
+const handleParseCommand = async (command: string, repo: GitRepo) => {
+  const parseTypeMap = {
+    'incremental': '增量解析',
+    'full': '全量覆盖解析'
+  }
+  
+  const parseType = parseTypeMap[command as keyof typeof parseTypeMap]
+  
+  // 如果是全量覆盖解析，需要确认
+  if (command === 'full') {
+    try {
+      await ElMessageBox.confirm(
+        '全量覆盖解析将清除该仓库的所有血缘关系，然后重新解析所有文件。此操作不可撤销，确定要继续吗？',
+        '确认全量覆盖解析',
+        {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning',
+        }
+      )
+    } catch {
+      // 用户取消
+      return
+    }
+  }
+  
   parsingRepos.value.add(repo.id)
   try {
-    await lineageAPI.parseRepo(repo.id)
-    ElMessage.success('血缘解析任务已启动')
+    if (command === 'incremental') {
+      await lineageAPI.parseRepoIncremental(repo.id)
+    } else if (command === 'full') {
+      await lineageAPI.parseRepoFull(repo.id)
+    }
+    
+    ElMessage.success(`${parseType}任务已启动`)
     await loadJobs()
-  } catch (error) {
+  } catch (error: any) {
     console.error('Parse repo error:', error)
-    ElMessage.error('启动血缘解析失败')
+    const errorMsg = error?.response?.data?.error || `启动${parseType}失败`
+    ElMessage.error(errorMsg)
   } finally {
     parsingRepos.value.delete(repo.id)
   }
+}
+
+// 保持向后兼容性的parseRepo方法（如果其他地方有调用）
+const parseRepo = async (repo: GitRepo) => {
+  return handleParseCommand('incremental', repo)
 }
 
 const deleteRepo = async (repo: GitRepo) => {
@@ -606,6 +659,13 @@ onMounted(() => {
   
   .status-tags {
     gap: 2px;
+  }
+  
+  .parse-desc {
+    font-size: 10px;
+    color: #909399;
+    margin-top: 2px;
+    line-height: 1.2;
   }
   
   .repo-table,

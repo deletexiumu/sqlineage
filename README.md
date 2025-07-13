@@ -76,6 +76,9 @@ HiicHiveIDE 是一个专为内部团队使用的轻量级数据血缘分析工�
 - 🔄 **智能同步**: Git仓库状态检测和自动恢复机制
 - 💾 **存储优化**: API模式零本地存储，适合空间受限环境
 - 🖥️ **Windows优化**: 完美适配Windows服务器部署，解决权限问题
+- 🔒 **权限控制系统**: 简化的用户认证，Git操作、元数据导入、删除功能需要登录
+- 🔄 **智能解析模式**: Git仓库支持增量解析和全量覆盖解析，优化大仓库处理效率
+- 👁️ **预览模式**: 血缘可视化支持纯展示模式，SQL解析结果不保存到本地数据库
 
 ## 技术架构
 
@@ -354,7 +357,15 @@ POST /api/metadata/hive-connection/selective_sync/      # 选择性同步
 
 **解析单个 SQL（支持实时字段级血缘）**
 ```bash
+# 标准解析（保存到数据库）
 POST /api/lineage/parse-sql/
+{
+    "sql_text": "INSERT INTO target_table SELECT * FROM source_table",
+    "file_path": "optional/file/path.sql"
+}
+
+# 预览模式（不保存到数据库）
+POST /api/lineage/parse-sql-preview/
 {
     "sql_text": "INSERT INTO target_table SELECT * FROM source_table",
     "file_path": "optional/file/path.sql"
@@ -365,10 +376,24 @@ POST /api/lineage/parse-sql/
 - 表级血缘关系
 - 字段级血缘图数据（column_graph）
 - 表统计信息
+- 预览模式标识（preview接口特有）
 
-**批量解析仓库（仅匹配现有元数据）**
+**Git仓库解析（支持增量和全量模式）**
 ```bash
+# 标准全量解析
 POST /api/lineage/parse-repo/
+{
+    "repo_id": 1
+}
+
+# 增量解析（只解析变更的文件）
+POST /api/lineage/parse-repo-incremental/
+{
+    "repo_id": 1
+}
+
+# 全量覆盖解析（清除旧数据，重新解析）
+POST /api/lineage/parse-repo-full/
 {
     "repo_id": 1
 }
