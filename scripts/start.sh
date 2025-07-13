@@ -55,9 +55,10 @@ stop_services() {
     echo "停止SQLFlow服务..."
     pkill -f "java.*java_data_lineage-1.1.2.jar" || true
     
-    # 停止后端服务（Django）
+    # 停止后端服务（Django/Daphne）
     echo "停止后端服务..."
     pkill -f "python.*manage.py.*runserver" || true
+    pkill -f "daphne.*hive_ide.asgi" || true
     
     # 停止前端服务（Vite）
     echo "停止前端服务..."
@@ -144,13 +145,16 @@ start_backend() {
         }
     fi
     
+    # 设置Django环境变量
+    export DJANGO_SETTINGS_MODULE=hive_ide.settings
+    
     # 启动Django服务
     if [ "$MODE" = "prod" ]; then
-        echo "生产模式启动后端..."
-        gunicorn hive_ide.wsgi:application --bind 0.0.0.0:8000 --workers 4 &
+        echo "生产模式启动后端（ASGI）..."
+        daphne -b 0.0.0.0 -p 8000 hive_ide.asgi:application &
     else
-        echo "开发模式启动后端..."
-        python manage.py runserver 0.0.0.0:8000 &
+        echo "开发模式启动后端（ASGI支持WebSocket）..."
+        daphne -b 0.0.0.0 -p 8000 hive_ide.asgi:application &
     fi
     
     BACKEND_PID=$!
@@ -270,6 +274,7 @@ main() {
     echo "停止现有服务..."
     pkill -f "java.*java_data_lineage-1.1.2.jar" 2>/dev/null || true
     pkill -f "python.*manage.py.*runserver" 2>/dev/null || true
+    pkill -f "daphne.*hive_ide.asgi" 2>/dev/null || true
     pkill -f "vite" 2>/dev/null || true
     sleep 2
     

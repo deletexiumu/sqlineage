@@ -101,7 +101,7 @@ class SQLLSPWorker {
   private attemptReconnect() {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++
-      const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 10000)
+      const delay = Math.min(3000 * Math.pow(2, this.reconnectAttempts - 1), 30000) // 增加延迟，减少重连频率
       
       console.log(`Attempting to reconnect to SQL LSP (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${delay}ms`)
       
@@ -181,10 +181,14 @@ class SQLLSPWorker {
 
   public async getCompletions(documentText: string, position: Position): Promise<CompletionItem[]> {
     try {
+      console.log('LSPWorker: getCompletions called', { position, textLength: documentText.length })
+      
       if (!this.isConnected) {
+        console.log('LSPWorker: Not connected, returning empty array')
         return []
       }
 
+      console.log('LSPWorker: Sending completion request to WebSocket')
       const result = await this.sendRequest('textDocument/completion', {
         textDocument: {
           uri: 'inmemory://sql-editor'
@@ -193,6 +197,7 @@ class SQLLSPWorker {
         documentText // 将文档内容包含在请求中
       })
 
+      console.log('LSPWorker: Received completion result', result)
       return result?.items || []
     } catch (error) {
       console.error('Failed to get completions:', error)
@@ -262,7 +267,9 @@ self.onmessage = async (event) => {
   try {
     switch (type) {
       case 'completion':
+        console.log('WebWorker: Processing completion request', data.requestId)
         const completions = await lspClient.getCompletions(data.documentText, data.position)
+        console.log('WebWorker: Got completions', completions.length, 'items')
         self.postMessage({
           type: 'completion-result',
           requestId: data.requestId,

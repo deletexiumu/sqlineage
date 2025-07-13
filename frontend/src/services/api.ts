@@ -89,11 +89,6 @@ export interface LineageParseJob {
   created_at: string
 }
 
-// Auth API
-export const authAPI = {
-  login: (username: string, password: string) =>
-    api.post('/auth/login/', { username, password }),
-}
 
 // Metadata API
 export const metadataAPI = {
