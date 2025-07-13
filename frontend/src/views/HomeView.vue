@@ -149,6 +149,24 @@ onMounted(() => {
   margin: 0 auto;
   height: 100%;
   overflow: auto;
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.9) 0%, rgba(241, 245, 249, 0.7) 50%, rgba(226, 232, 240, 0.8) 100%);
+  background-attachment: fixed;
+  position: relative;
+}
+
+.home-view::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.03) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.03) 0%, transparent 50%),
+    radial-gradient(circle at 40% 60%, rgba(34, 197, 94, 0.02) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: -1;
 }
 
 .hero-section {
@@ -158,23 +176,30 @@ onMounted(() => {
 
 .hero-section h1 {
   font-size: 48px;
-  font-weight: bold;
-  color: #303133;
+  font-weight: 700;
+  background: linear-gradient(135deg, #334155 0%, #475569 50%, #64748b 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
   margin-bottom: 16px;
+  text-shadow: none;
+  letter-spacing: -0.025em;
 }
 
 .subtitle {
   font-size: 24px;
-  color: #606266;
+  color: #64748b;
   margin-bottom: 20px;
+  font-weight: 500;
 }
 
 .description {
   font-size: 16px;
-  color: #909399;
+  color: #64748b;
   line-height: 1.6;
   max-width: 600px;
   margin: 0 auto;
+  font-weight: 400;
 }
 
 .features {
@@ -183,14 +208,20 @@ onMounted(() => {
 
 .feature-card {
   cursor: pointer;
-  transition: transform 0.3s ease;
-  height: 220px; /* 固定卡片高度 */
+  transition: all 0.3s ease;
+  height: 220px;
   display: flex;
   flex-direction: column;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
 }
 
 .feature-card:hover {
-  transform: translateY(-5px);
+  transform: translateY(-8px);
+  box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  border-color: rgba(59, 130, 246, 0.3);
 }
 
 .feature-content {
@@ -246,6 +277,54 @@ onMounted(() => {
   color: white;
   font-size: 36px;
   font-weight: bold;
+}
+
+/* 深色模式专用样式 */
+html.dark .home-view {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.8) 50%, rgba(51, 65, 85, 0.9) 100%) !important;
+  background-attachment: fixed;
+}
+
+html.dark .home-view::before {
+  background: 
+    radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 40% 60%, rgba(34, 197, 94, 0.06) 0%, transparent 50%) !important;
+}
+
+html.dark .hero-section h1 {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%) !important;
+  background-clip: text !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+html.dark .subtitle {
+  color: #cbd5e1 !important;
+}
+
+html.dark .description {
+  color: #94a3b8 !important;
+}
+
+html.dark .feature-card {
+  background: rgba(30, 41, 59, 0.8) !important;
+  border-color: rgba(51, 65, 85, 0.6) !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.1) !important;
+}
+
+html.dark .feature-card:hover {
+  background: rgba(51, 65, 85, 0.9) !important;
+  border-color: rgba(59, 130, 246, 0.5) !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.2) !important;
+}
+
+html.dark .feature-content h3 {
+  color: #f8fafc !important;
+}
+
+html.dark .feature-content p {
+  color: #cbd5e1 !important;
 }
 
 /* 响应式设计 */

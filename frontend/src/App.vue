@@ -74,9 +74,9 @@ onUnmounted(() => {
             :default-active="$route.path"
             mode="horizontal"
             router
-            background-color="#409eff"
-            text-color="#fff"
-            active-text-color="#ffd04b"
+            background-color="var(--header-bg)"
+            text-color="var(--header-text)"
+            active-text-color="#60a5fa"
             class="desktop-menu"
           >
             <el-menu-item index="/">
@@ -186,17 +186,23 @@ onUnmounted(() => {
 <style scoped>
 /* 深色模式变量 */
 :root {
-  --bg-color: #ffffff;
-  --text-color: #303133;
-  --border-color: #dcdfe6;
-  --header-bg: #409eff;
+  --bg-color: #f8fafc;
+  --text-color: #1e293b;
+  --border-color: #e2e8f0;
+  --header-bg: #334155;
+  --header-text: #ffffff;
+  --card-bg: #ffffff;
+  --soft-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
 }
 
 html.dark {
-  --bg-color: #1a1a1a;
-  --text-color: #e5eaf3;
-  --border-color: #363636;
-  --header-bg: #1f2937;
+  --bg-color: #0f172a;
+  --text-color: #f1f5f9;
+  --border-color: #334155;
+  --header-bg: #1e293b;
+  --header-text: #f8fafc;
+  --card-bg: #1e293b;
+  --soft-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
 }
 
 .app {
@@ -204,7 +210,8 @@ html.dark {
   width: 100vw;
   display: flex;
   flex-direction: column;
-  background-color: var(--bg-color);
+  background: linear-gradient(135deg, var(--bg-color) 0%, rgba(248, 250, 252, 0.8) 100%);
+  background-attachment: fixed;
   color: var(--text-color);
 }
 
@@ -221,10 +228,12 @@ html.dark {
 }
 
 .logo h2 {
-  color: white;
+  color: var(--header-text);
   margin: 0;
   font-size: 20px;
   white-space: nowrap;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .desktop-menu {

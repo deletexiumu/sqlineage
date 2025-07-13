@@ -4,18 +4,19 @@
 html.dark {
   color-scheme: dark;
   background-color: #0f172a !important;
-  color: #f1f5f9 !important;
+  color: #f8fafc !important;
 }
 
 html.dark body {
   background-color: #0f172a !important;
-  color: #f1f5f9 !important;
+  color: #f8fafc !important;
 }
 
 /* 主要容器 */
 html.dark #app {
-  background-color: #0f172a !important;
-  color: #f1f5f9 !important;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%) !important;
+  background-attachment: fixed !important;
+  color: #f8fafc !important;
 }
 
 /* 覆盖 Element Plus 组件的深色模式样式 - 使用更好的对比度 */
@@ -464,4 +465,90 @@ html:not(.dark) .el-button {
 
 html:not(.dark) .el-dialog {
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* 修复深色模式下加载动画的方块问题 */
+html.dark .el-loading-mask {
+  background-color: rgba(15, 23, 42, 0.8) !important;
+}
+
+html.dark .el-loading-spinner {
+  color: #f8fafc !important;
+}
+
+html.dark .el-loading-spinner .circular {
+  background: none !important;
+  border: none !important;
+}
+
+html.dark .el-loading-spinner .path {
+  stroke: #3b82f6 !important;
+  stroke-width: 2 !important;
+}
+
+html.dark .el-loading-text {
+  color: #f8fafc !important;
+  font-weight: 500 !important;
+}
+
+/* 修复按钮加载状态 */
+html.dark .el-button.is-loading {
+  background-color: #334155 !important;
+  border-color: #475569 !important;
+  color: #f8fafc !important;
+}
+
+html.dark .el-button.is-loading::before {
+  background-color: transparent !important;
+}
+
+html.dark .el-button--primary.is-loading {
+  background-color: #2563eb !important;
+  border-color: #2563eb !important;
+}
+
+/* 修复表格加载 */
+html.dark .el-table__empty-block {
+  background-color: #1e293b !important;
+}
+
+html.dark .el-table__empty-text {
+  color: #94a3b8 !important;
+}
+
+/* 修复其他组件的加载状态 */
+html.dark .el-card.is-loading {
+  background-color: #1e293b !important;
+}
+
+html.dark .el-skeleton {
+  background-color: #334155 !important;
+}
+
+html.dark .el-skeleton__item {
+  background: linear-gradient(90deg, #334155 25%, #475569 50%, #334155 75%) !important;
+  background-size: 200% 100% !important;
+  animation: skeleton-loading 1.4s ease-in-out infinite !important;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* 修复深色模式下的其他问题 */
+html.dark .el-icon {
+  color: inherit !important;
+}
+
+html.dark .el-statistic__head .el-icon {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+html.dark .el-menu--horizontal .el-menu-item .el-icon {
+  color: #f8fafc !important;
 }
