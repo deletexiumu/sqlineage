@@ -29,26 +29,15 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
 
 class GitRepoViewSet(viewsets.ModelViewSet):
     serializer_class = GitRepoSerializer
-    permission_classes = [AllowAny]  # 暂时允许匿名访问，适合内部使用
+    permission_classes = [IsAuthenticated]  # Git仓库操作需要登录
 
     def get_queryset(self):
-        # 如果用户已认证，返回用户的仓库；否则返回所有仓库（适合内部使用）
-        if self.request.user.is_authenticated:
-            return GitRepo.objects.filter(user=self.request.user)
-        else:
-            return GitRepo.objects.all()
+        # 返回当前用户的仓库
+        return GitRepo.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        # 如果用户已认证，关联用户；否则关联默认用户
-        if self.request.user.is_authenticated:
-            serializer.save(user=self.request.user)
-        else:
-            # 获取或创建默认用户
-            default_user, created = User.objects.get_or_create(
-                username='default',
-                defaults={'email': 'default@example.com'}
-            )
-            serializer.save(user=default_user)
+        # 关联当前认证用户
+        serializer.save(user=self.request.user)
     
     def create(self, request, *args, **kwargs):
         """重写create方法以提供更好的错误处理"""

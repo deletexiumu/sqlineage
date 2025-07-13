@@ -89,11 +89,6 @@ export interface LineageParseJob {
   created_at: string
 }
 
-// Auth API
-export const authAPI = {
-  login: (username: string, password: string) =>
-    api.post('/auth/login/', { username, password }),
-}
 
 // Metadata API
 export const metadataAPI = {
@@ -106,8 +101,8 @@ export const metadataAPI = {
   getDatabases: () =>
     api.get<string[]>('/metadata/tables/databases/'),
   
-  getAutocomplete: (query: string, limit = 10) =>
-    api.get('/metadata/tables/autocomplete/', { params: { query, limit } }),
+  getAutocomplete: (query: string, limit = 10, extraParams = {}) =>
+    api.get('/metadata/tables/autocomplete/', { params: { query, limit, ...extraParams } }),
   
   getStatistics: () =>
     api.get('/metadata/tables/statistics/'),
@@ -224,8 +219,17 @@ export const lineageAPI = {
   parseSQL: (sqlText: string, filePath = '') =>
     api.post('/lineage/relations/parse_sql/', { sql_text: sqlText, file_path: filePath }),
   
+  parseSQLPreview: (sqlText: string, filePath = '') =>
+    api.post('/lineage/relations/parse_sql_preview/', { sql_text: sqlText, file_path: filePath }),
+  
   parseRepo: (repoId: number) =>
     api.post('/lineage/relations/parse_repo/', { repo_id: repoId }),
+  
+  parseRepoIncremental: (repoId: number) =>
+    api.post('/lineage/relations/parse_repo_incremental/', { repo_id: repoId }),
+  
+  parseRepoFull: (repoId: number) =>
+    api.post('/lineage/relations/parse_repo_full/', { repo_id: repoId }),
   
   getImpact: (tableName: string) =>
     api.get('/lineage/relations/impact/', { params: { table_name: tableName } }),
@@ -238,6 +242,18 @@ export const lineageAPI = {
   
   getJob: (id: number) =>
     api.get<LineageParseJob>(`/lineage/jobs/${id}/`),
+}
+
+// Auth API
+export const authAPI = {
+  login: (username: string, password: string) =>
+    api.post('/auth/login/', { username, password }),
+  
+  logout: () =>
+    api.post('/auth/logout/'),
+  
+  getUserInfo: () =>
+    api.get('/auth/user/'),
 }
 
 export default api

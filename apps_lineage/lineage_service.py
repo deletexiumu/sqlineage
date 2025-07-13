@@ -209,6 +209,7 @@ class LineageService:
 
     def extract_lineage_relations(self, parsed_data, sql_script_path=""):
         relations = []
+        skipped_tables = set()  # 记录跳过的表
         
         try:
             # 处理真实SQLFlow服务的响应格式
@@ -244,12 +245,16 @@ class LineageService:
                     else:
                         continue
                     
-                    # Get or create target table
-                    target_hive_table, _ = HiveTable.objects.get_or_create(
-                        name=target_table,
-                        database=target_db,
-                        defaults={'columns_json': '[]'}
-                    )
+                    # 只匹配现有的目标表，不创建新表
+                    try:
+                        target_hive_table = HiveTable.objects.get(
+                            name=target_table,
+                            database=target_db
+                        )
+                    except HiveTable.DoesNotExist:
+                        skipped_tables.add(f"{target_db}.{target_table}")
+                        logger.debug(f"目标表 {target_db}.{target_table} 在元数据中不存在，跳过血缘关系创建")
+                        continue
                     
                     # Process each source
                     for source in sources:
@@ -262,12 +267,16 @@ class LineageService:
                         else:
                             continue
                         
-                        # Get or create source table
-                        source_hive_table, _ = HiveTable.objects.get_or_create(
-                            name=source_table,
-                            database=source_db,
-                            defaults={'columns_json': '[]'}
-                        )
+                        # 只匹配现有的源表，不创建新表
+                        try:
+                            source_hive_table = HiveTable.objects.get(
+                                name=source_table,
+                                database=source_db
+                            )
+                        except HiveTable.DoesNotExist:
+                            skipped_tables.add(f"{source_db}.{source_table}")
+                            logger.debug(f"源表 {source_db}.{source_table} 在元数据中不存在，跳过血缘关系创建")
+                            continue
                         
                         # Create or update lineage relation
                         relation, created = LineageRelation.objects.get_or_create(
@@ -309,6 +318,12 @@ class LineageService:
                 except Exception as e:
                     logger.error(f"Error processing relationship: {str(e)}")
                     continue
+            
+            # 记录解析总结
+            if skipped_tables:
+                logger.info(f"Git仓库解析完成: 创建了{len(relations)}个血缘关系，跳过了{len(skipped_tables)}个不存在的表: {', '.join(sorted(skipped_tables))}")
+            else:
+                logger.info(f"Git仓库解析完成: 创建了{len(relations)}个血缘关系，所有表都在现有元数据中找到")
             
             return relations
             
@@ -527,3 +542,238 @@ class LineageService:
             job.save()
             logger.error(f"Batch parsing failed: {str(e)}")
             return job
+
+    def incremental_parse_repository(self, git_repo):
+        """增量解析仓库 - 只解析变更的文件"""
+        from apps_git.git_service import GitService
+        
+        job = LineageParseJob.objects.create(
+            git_repo=git_repo,
+            status='pending',
+            parse_type='incremental'
+        )
+        
+        try:
+            job.status = 'running'
+            job.started_at = timezone.now()
+            job.save()
+            
+            git_service = GitService(git_repo)
+            
+            # 获取最近的解析任务
+            last_successful_job = LineageParseJob.objects.filter(
+                git_repo=git_repo,
+                status='completed'
+            ).order_by('-completed_at').first()
+            
+            if last_successful_job and last_successful_job.completed_at:
+                # 获取自上次解析以来变更的文件
+                try:
+                    changed_files = git_service.get_changed_files_since(last_successful_job.completed_at)
+                    # 过滤出SQL文件
+                    sql_files = [f for f in changed_files if f.endswith('.sql')]
+                except Exception as e:
+                    logger.warning(f"Failed to get changed files, falling back to all files: {str(e)}")
+                    # 如果获取变更文件失败，回退到全量解析
+                    sql_files = [f['path'] for f in git_service.get_sql_files()]
+            else:
+                # 如果没有之前的成功解析记录，进行全量解析
+                logger.info("No previous successful parsing found, performing full parse")
+                sql_files = [f['path'] for f in git_service.get_sql_files()]
+            
+            job.total_files = len(sql_files)
+            job.save()
+            
+            logger.info(f"Incremental parsing: processing {len(sql_files)} files")
+            
+            for sql_file_path in sql_files:
+                try:
+                    content = git_service.read_file(sql_file_path)
+                    if content:
+                        self.parse_sql_file(content, sql_file_path)
+                    
+                    job.processed_files += 1
+                    job.save()
+                    
+                except Exception as e:
+                    logger.error(f"Failed to process file {sql_file_path}: {str(e)}")
+                    job.failed_files += 1
+                    job.save()
+                    continue
+            
+            job.status = 'completed'
+            job.completed_at = timezone.now()
+            job.save()
+            
+            return job
+            
+        except Exception as e:
+            job.status = 'failed'
+            job.error_message = str(e)
+            job.completed_at = timezone.now()
+            job.save()
+            logger.error(f"Incremental parsing failed: {str(e)}")
+            return job
+
+    def full_parse_repository(self, git_repo):
+        """全量覆盖解析仓库 - 清除所有相关血缘关系，重新解析"""
+        from apps_git.git_service import GitService
+        
+        job = LineageParseJob.objects.create(
+            git_repo=git_repo,
+            status='pending',
+            parse_type='full_overwrite'
+        )
+        
+        try:
+            job.status = 'running'
+            job.started_at = timezone.now()
+            job.save()
+            
+            # 清除该仓库相关的血缘关系
+            deleted_relations = self._clear_repository_lineage(git_repo)
+            logger.info(f"Cleared {deleted_relations} existing lineage relations for repository {git_repo.name}")
+            
+            git_service = GitService(git_repo)
+            sql_files = git_service.get_sql_files()
+            
+            job.total_files = len(sql_files)
+            job.save()
+            
+            logger.info(f"Full parsing: processing {len(sql_files)} files")
+            
+            for sql_file in sql_files:
+                try:
+                    content = git_service.read_file(sql_file['path'])
+                    if content:
+                        self.parse_sql_file(content, sql_file['path'])
+                    
+                    job.processed_files += 1
+                    job.save()
+                    
+                except Exception as e:
+                    logger.error(f"Failed to process file {sql_file['path']}: {str(e)}")
+                    job.failed_files += 1
+                    job.save()
+                    continue
+            
+            job.status = 'completed'
+            job.completed_at = timezone.now()
+            job.save()
+            
+            return job
+            
+        except Exception as e:
+            job.status = 'failed'
+            job.error_message = str(e)
+            job.completed_at = timezone.now()
+            job.save()
+            logger.error(f"Full parsing failed: {str(e)}")
+            return job
+
+    def _clear_repository_lineage(self, git_repo):
+        """清除指定仓库相关的血缘关系"""
+        # 找到与该仓库相关的所有血缘关系（通过file_path匹配）
+        relations_to_delete = LineageRelation.objects.filter(
+            file_path__contains=git_repo.name
+        )
+        
+        deleted_count = relations_to_delete.count()
+        
+        # 删除相关的字段级血缘
+        from .models import ColumnLineage
+        ColumnLineage.objects.filter(
+            lineage_relation__in=relations_to_delete
+        ).delete()
+        
+        # 删除表级血缘关系
+        relations_to_delete.delete()
+        
+        return deleted_count
+
+    def extract_lineage_relations_preview(self, parsed_data, file_path=''):
+        """提取血缘关系数据用于预览，不保存到数据库"""
+        if not parsed_data:
+            return []
+        
+        preview_relations = []
+        
+        try:
+            # 提取表级血缘关系
+            tables = parsed_data.get('tables', [])
+            
+            for table in tables:
+                table_name = self._clean_name(table.get('name', ''))
+                if not table_name:
+                    continue
+                
+                # 解析数据库和表名
+                if '.' in table_name:
+                    database, table_only = table_name.split('.', 1)
+                    database = self._clean_name(database)
+                    table_only = self._clean_name(table_only)
+                else:
+                    database = 'default'
+                    table_only = self._clean_name(table_name)
+                
+                full_name = f"{database}.{table_only}"
+                
+                # 构建预览数据（模拟LineageRelation结构）
+                relation_data = {
+                    'id': f"preview_{len(preview_relations)}",
+                    'source_table': {
+                        'name': table_only,
+                        'database': database,
+                        'full_name': full_name
+                    },
+                    'target_table': None,  # 会在下面的关系分析中填充
+                    'sql_script_path': file_path,
+                    'relation_type': table.get('relationType', 'unknown'),
+                    'created_at': timezone.now().isoformat(),
+                    'is_preview': True
+                }
+                
+                # 处理表之间的关系
+                parent_tables = table.get('parentTables', [])
+                if parent_tables:
+                    for parent in parent_tables:
+                        parent_name = self._clean_name(parent.get('name', ''))
+                        if parent_name:
+                            if '.' in parent_name:
+                                parent_db, parent_table = parent_name.split('.', 1)
+                                parent_db = self._clean_name(parent_db)
+                                parent_table = self._clean_name(parent_table)
+                            else:
+                                parent_db = 'default'
+                                parent_table = self._clean_name(parent_name)
+                            
+                            parent_full_name = f"{parent_db}.{parent_table}"
+                            
+                            # 创建关系记录
+                            preview_relation = relation_data.copy()
+                            preview_relation['id'] = f"preview_{len(preview_relations)}"
+                            preview_relation['source_table'] = {
+                                'name': parent_table,
+                                'database': parent_db,
+                                'full_name': parent_full_name
+                            }
+                            preview_relation['target_table'] = {
+                                'name': table_only,
+                                'database': database,
+                                'full_name': full_name
+                            }
+                            
+                            preview_relations.append(preview_relation)
+                
+                # 如果没有父表关系，创建一个单独的表记录用于显示
+                if not parent_tables:
+                    relation_data['target_table'] = relation_data['source_table']
+                    relation_data['source_table'] = None
+                    preview_relations.append(relation_data)
+            
+            logger.info(f"Generated {len(preview_relations)} preview relations")
+            return preview_relations
+            
+        except Exception as e:
+            logger.error(f"Failed to extract preview relations: {str(e)}")
+            return []

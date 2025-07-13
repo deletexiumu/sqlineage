@@ -52,7 +52,13 @@
       <div v-else class="sql-parse-mode">
         <div class="sql-editor-section">
           <div class="sql-editor-header">
-            <span>输入SQL语句进行血缘分析</span>
+            <div class="header-left">
+              <span>输入SQL语句进行血缘分析</span>
+              <el-tag type="info" size="small" class="preview-tag">
+                <el-icon><View /></el-icon>
+                预览模式
+              </el-tag>
+            </div>
             <div class="sql-actions">
               <el-button 
                 type="primary" 
@@ -148,7 +154,7 @@ import { Graph } from '@antv/g6'
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { lineageAPI } from '@/services/api'
 import { ElMessage } from 'element-plus'
-import { Search, Share, DataBoard, Download, RefreshLeft } from '@element-plus/icons-vue'
+import { Search, Share, DataBoard, Download, RefreshLeft, View } from '@element-plus/icons-vue'
 import ColumnLineageGraph from './ColumnLineageGraph.vue'
 
 // 基础状态
@@ -206,8 +212,8 @@ const parseSqlLineage = async () => {
   parseResult.value = null
 
   try {
-    // 调用SQL解析API
-    const response = await lineageAPI.parseSQL(sqlCode.value)
+    // 调用SQL解析预览API（不保存到数据库）
+    const response = await lineageAPI.parseSQLPreview(sqlCode.value)
     parseResult.value = response.data
     
     if (response.data.status === 'success') {
@@ -221,7 +227,7 @@ const parseSqlLineage = async () => {
         // 如果有字段级血缘数据，优先显示字段级血缘图
         if (columnGraph.value && columnGraph.value.tables && columnGraph.value.tables.length > 0) {
           showColumnGraph.value = true
-          ElMessage.success(`解析成功！发现 ${columnGraph.value.tables.length} 个表，${columnGraph.value.relationships.length} 个字段血缘关系`)
+          ElMessage.success(`预览解析成功！发现 ${columnGraph.value.tables.length} 个表，${columnGraph.value.relationships.length} 个字段血缘关系（结果未保存）`)
         } else {
           // 否则显示表级血缘图
           showColumnGraph.value = false
@@ -261,7 +267,7 @@ const parseSqlLineage = async () => {
             await nextTick()
             renderGraph()
             
-            ElMessage.success(`解析成功！发现 ${graphNodes.size} 个表，${graphEdges.length} 个血缘关系`)
+            ElMessage.success(`预览解析成功！发现 ${graphNodes.size} 个表，${graphEdges.length} 个血缘关系（结果未保存）`)
           } else {
             error.value = 'SQL中未发现表级血缘关系'
             ElMessage.warning(error.value)
@@ -683,6 +689,16 @@ onUnmounted(() => {
   background: #f5f7fa;
   border-bottom: 1px solid #e4e7ed;
   border-radius: 4px 4px 0 0;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.preview-tag {
+  font-size: 11px;
 }
 
 .sql-actions {

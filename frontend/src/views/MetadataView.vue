@@ -98,9 +98,12 @@
             {{ formatDate(scope.row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200">
+        <el-table-column label="操作" width="280">
           <template #default="scope">
             <div class="action-buttons">
+              <el-button type="info" size="small" @click="viewTableDetails(scope.row)">
+                查看详情
+              </el-button>
               <el-button type="primary" size="small" @click="viewLineage(scope.row.full_name)">
                 查看血缘
               </el-button>
@@ -131,6 +134,58 @@
     <div v-show="activeTab === 'hive'">
       <HiveConnection />
     </div>
+
+    <!-- 表详情弹窗 -->
+    <el-dialog
+      v-model="tableDetailsVisible"
+      :title="`表详情: ${selectedTable?.full_name || ''}`"
+      width="80%"
+      :close-on-click-modal="false"
+    >
+      <div v-if="selectedTable" class="table-details">
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="表名">{{ selectedTable.name }}</el-descriptions-item>
+          <el-descriptions-item label="数据库">{{ selectedTable.database }}</el-descriptions-item>
+          <el-descriptions-item label="完整名称">{{ selectedTable.full_name }}</el-descriptions-item>
+          <el-descriptions-item label="字段数量">{{ selectedTable.columns.length }}</el-descriptions-item>
+          <el-descriptions-item label="创建时间">{{ formatDate(selectedTable.created_at) }}</el-descriptions-item>
+          <el-descriptions-item label="更新时间">{{ formatDate(selectedTable.updated_at) }}</el-descriptions-item>
+        </el-descriptions>
+
+        <div class="columns-section">
+          <h3>字段信息</h3>
+          <el-input
+            v-model="columnSearchText"
+            placeholder="搜索字段名称或类型"
+            style="width: 300px; margin-bottom: 15px"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+          
+          <el-table :data="filteredColumns" style="width: 100%" height="400">
+            <el-table-column prop="name" label="字段名" width="200" />
+            <el-table-column prop="type" label="类型" width="150" />
+            <el-table-column prop="comment" label="备注" min-width="300">
+              <template #default="scope">
+                <span v-if="scope.row.comment" class="column-comment">
+                  {{ scope.row.comment }}
+                </span>
+                <span v-else class="no-comment">无备注</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </div>
+      
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="tableDetailsVisible = false">关闭</el-button>
+          <el-button type="primary" @click="copyTableSchema">复制表结构</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -155,6 +210,11 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const deletingTable = ref(false)
 
+// 表详情相关状态
+const tableDetailsVisible = ref(false)
+const selectedTable = ref<HiveTable | null>(null)
+const columnSearchText = ref('')
+
 const filteredTables = computed(() => {
   let filtered = tables.value
   
@@ -172,6 +232,21 @@ const filteredTables = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   const end = start + pageSize.value
   return filtered.slice(start, end)
+})
+
+// 过滤后的字段列表
+const filteredColumns = computed(() => {
+  if (!selectedTable.value || !selectedTable.value.columns) return []
+  
+  if (!columnSearchText.value) {
+    return selectedTable.value.columns
+  }
+  
+  return selectedTable.value.columns.filter(column => 
+    column.name.toLowerCase().includes(columnSearchText.value.toLowerCase()) ||
+    column.type.toLowerCase().includes(columnSearchText.value.toLowerCase()) ||
+    (column.comment && column.comment.toLowerCase().includes(columnSearchText.value.toLowerCase()))
+  )
 })
 
 const loadDatabases = async () => {
@@ -328,6 +403,48 @@ const deleteTable = async (table: HiveTable) => {
   })
 }
 
+// 查看表详情
+const viewTableDetails = (table: HiveTable) => {
+  selectedTable.value = table
+  columnSearchText.value = ''
+  tableDetailsVisible.value = true
+}
+
+// 复制表结构
+const copyTableSchema = async () => {
+  if (!selectedTable.value) return
+  
+  try {
+    const schema = selectedTable.value.columns.map(column => 
+      `${column.name}\t${column.type}\t${column.comment || ''}`
+    ).join('\n')
+    
+    const tableInfo = `表名: ${selectedTable.value.full_name}\n数据库: ${selectedTable.value.database}\n字段数量: ${selectedTable.value.columns.length}\n\n字段信息:\n字段名\t类型\t备注\n${schema}`
+    
+    await navigator.clipboard.writeText(tableInfo)
+    ElMessage.success('表结构已复制到剪贴板')
+  } catch (error) {
+    console.error('Copy table schema error:', error)
+    // 降级到传统方法
+    try {
+      const textArea = document.createElement('textarea')
+      const schema = selectedTable.value!.columns.map(column => 
+        `${column.name}\t${column.type}\t${column.comment || ''}`
+      ).join('\n')
+      const tableInfo = `表名: ${selectedTable.value!.full_name}\n数据库: ${selectedTable.value!.database}\n字段数量: ${selectedTable.value!.columns.length}\n\n字段信息:\n字段名\t类型\t备注\n${schema}`
+      
+      textArea.value = tableInfo
+      document.body.appendChild(textArea)
+      textArea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textArea)
+      ElMessage.success('表结构已复制到剪贴板')
+    } catch (fallbackError) {
+      ElMessage.error('复制失败，请手动复制')
+    }
+  }
+}
+
 onMounted(() => {
   loadDatabases()
   loadTables()
@@ -397,6 +514,38 @@ onMounted(() => {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* 表详情弹窗样式 */
+.table-details {
+  padding: 10px 0;
+}
+
+.columns-section {
+  margin-top: 20px;
+}
+
+.columns-section h3 {
+  margin-bottom: 15px;
+  color: #303133;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.column-comment {
+  color: #606266;
+  word-break: break-all;
+}
+
+.no-comment {
+  color: #c0c4cc;
+  font-style: italic;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 /* 响应式设计 */

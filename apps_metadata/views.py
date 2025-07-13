@@ -1,5 +1,6 @@
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db.models import Q, Count
 from django.http import HttpResponse
@@ -45,29 +46,90 @@ class HiveTableViewSet(viewsets.ReadOnlyModelViewSet):
         query = serializer.validated_data['query']
         limit = serializer.validated_data['limit']
         
-        tables = HiveTable.objects.filter(
-            Q(name__icontains=query) | Q(database__icontains=query)
-        )[:limit]
+        # 获取额外的上下文参数
+        context_type = request.query_params.get('context', 'mixed')  # mixed, table, column
+        schema = request.query_params.get('schema', '')  # 指定的schema
+        table_alias = request.query_params.get('table_alias', '')  # 表别名
+        related_tables = request.query_params.get('related_tables', '')  # 相关表列表，逗号分隔
         
         suggestions = []
-        for table in tables:
-            suggestions.append({
-                'type': 'table',
-                'label': table.full_name,
-                'value': table.full_name,
-                'database': table.database,
-                'table': table.name
-            })
-            
-            for column in table.columns:
-                if query.lower() in column['name'].lower():
-                    suggestions.append({
-                        'type': 'column',
-                        'label': f"{table.full_name}.{column['name']}",
-                        'value': column['name'],
-                        'table': table.full_name,
-                        'dataType': column.get('type', '')
-                    })
+        
+        # 如果指定了schema，优先在该schema下搜索
+        if schema:
+            tables = HiveTable.objects.filter(
+                database=schema,
+                name__icontains=query
+            )[:limit]
+        else:
+            tables = HiveTable.objects.filter(
+                Q(name__icontains=query) | Q(database__icontains=query)
+            )[:limit]
+        
+        # 根据上下文类型决定返回内容
+        if context_type in ['mixed', 'table']:
+            for table in tables:
+                table_comment = ''
+                if table.columns:
+                    # 尝试从第一个字段的comment中获取表注释（如果存在）
+                    for col in table.columns:
+                        if col.get('comment') and 'table comment' in col.get('comment', '').lower():
+                            table_comment = col.get('comment', '')
+                            break
+                
+                suggestions.append({
+                    'type': 'table',
+                    'label': table.full_name,
+                    'value': table.full_name,
+                    'database': table.database,
+                    'table': table.name,
+                    'comment': table_comment,
+                    'detail': f"数据库: {table.database}",
+                    'documentation': table_comment or f"表 {table.full_name}"
+                })
+        
+        # 处理字段补全
+        if context_type in ['mixed', 'column']:
+            # 如果有表别名，只搜索该表的字段
+            if table_alias and related_tables:
+                table_list = [t.strip() for t in related_tables.split(',') if t.strip()]
+                for table_name in table_list:
+                    try:
+                        if '.' in table_name:
+                            db, tb = table_name.split('.', 1)
+                            table = HiveTable.objects.get(database=db, name=tb)
+                        else:
+                            table = HiveTable.objects.filter(name=table_name).first()
+                        
+                        if table:
+                            for column in table.columns:
+                                if query.lower() in column['name'].lower():
+                                    suggestions.append({
+                                        'type': 'column',
+                                        'label': f"{table_alias}.{column['name']}",
+                                        'value': column['name'],
+                                        'table': table.full_name,
+                                        'dataType': column.get('type', ''),
+                                        'comment': column.get('comment', ''),
+                                        'detail': f"类型: {column.get('type', '')}",
+                                        'documentation': column.get('comment', '') or f"字段 {column['name']} ({column.get('type', '')})"
+                                    })
+                    except HiveTable.DoesNotExist:
+                        continue
+            else:
+                # 通用字段搜索
+                for table in tables:
+                    for column in table.columns:
+                        if query.lower() in column['name'].lower():
+                            suggestions.append({
+                                'type': 'column',
+                                'label': f"{table.full_name}.{column['name']}",
+                                'value': column['name'],
+                                'table': table.full_name,
+                                'dataType': column.get('type', ''),
+                                'comment': column.get('comment', ''),
+                                'detail': f"类型: {column.get('type', '')} | 表: {table.full_name}",
+                                'documentation': column.get('comment', '') or f"字段 {column['name']} ({column.get('type', '')})"
+                            })
         
         return Response(suggestions[:limit])
 
@@ -98,6 +160,7 @@ class HiveTableViewSet(viewsets.ReadOnlyModelViewSet):
         })
 
     @action(detail=False, methods=['delete'])
+    @permission_classes([IsAuthenticated])
     def clear_all(self, request):
         """清空所有元数据和血缘关系"""
         try:
@@ -135,6 +198,7 @@ class HiveTableViewSet(viewsets.ReadOnlyModelViewSet):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['delete'])
+    @permission_classes([IsAuthenticated])
     def delete_database(self, request):
         """删除指定数据库的所有元数据和血缘关系"""
         database = request.query_params.get('database')
@@ -201,6 +265,7 @@ class HiveTableViewSet(viewsets.ReadOnlyModelViewSet):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['delete'])
+    @permission_classes([IsAuthenticated])
     def delete_table(self, request):
         """删除指定表的元数据和血缘关系"""
         database = request.query_params.get('database')
@@ -287,6 +352,7 @@ class BusinessMappingViewSet(viewsets.ModelViewSet):
 
 class MetadataImportViewSet(viewsets.ViewSet):
     """元数据导入视图集"""
+    permission_classes = [IsAuthenticated]
     
     @action(detail=False, methods=['post'])
     def import_metadata(self, request):
@@ -357,6 +423,7 @@ class MetadataImportViewSet(viewsets.ViewSet):
 
 class HiveConnectionViewSet(viewsets.ViewSet):
     """Hive连接管理视图集"""
+    permission_classes = [IsAuthenticated]
     
     @action(detail=False, methods=['post'])
     def test_connection(self, request):

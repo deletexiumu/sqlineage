@@ -536,3 +536,41 @@ class GitService:
         except Exception as e:
             logger.error(f"Failed to get commit history for {self.git_repo.name}: {str(e)}")
             return []
+
+    def get_changed_files_since(self, since_datetime):
+        """获取自指定时间以来变更的文件列表"""
+        if not self.repo:
+            if not self.clone_or_pull():
+                return []
+        
+        try:
+            # 转换datetime为git可以理解的格式
+            since_str = since_datetime.strftime('%Y-%m-%d %H:%M:%S')
+            
+            # 获取从指定时间以来的所有commit
+            commits = list(self.repo.iter_commits(since=since_str))
+            
+            changed_files = set()
+            
+            for commit in commits:
+                # 获取每个commit中变更的文件
+                if commit.parents:
+                    # 比较与父commit的差异
+                    diffs = commit.diff(commit.parents[0])
+                    for diff in diffs:
+                        if diff.a_path:
+                            changed_files.add(diff.a_path)
+                        if diff.b_path:
+                            changed_files.add(diff.b_path)
+                else:
+                    # 首次commit，获取所有文件
+                    for item in commit.tree.traverse():
+                        if item.type == 'blob':  # 文件类型
+                            changed_files.add(item.path)
+            
+            logger.info(f"Found {len(changed_files)} changed files since {since_str}")
+            return list(changed_files)
+            
+        except Exception as e:
+            logger.error(f"Failed to get changed files for {self.git_repo.name}: {str(e)}")
+            raise e

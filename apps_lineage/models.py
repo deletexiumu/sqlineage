@@ -47,8 +47,15 @@ class LineageParseJob(models.Model):
         ('failed', 'Failed'),
     ]
     
+    PARSE_TYPE_CHOICES = [
+        ('full', 'Full Parse'),
+        ('incremental', 'Incremental Parse'),
+        ('full_overwrite', 'Full Overwrite Parse'),
+    ]
+    
     git_repo = models.ForeignKey('apps_git.GitRepo', on_delete=models.CASCADE, null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    parse_type = models.CharField(max_length=20, choices=PARSE_TYPE_CHOICES, default='full')
     total_files = models.IntegerField(default=0)
     processed_files = models.IntegerField(default=0)
     failed_files = models.IntegerField(default=0)

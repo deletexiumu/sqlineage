@@ -1,14 +1,72 @@
 <script setup lang="ts">
-import { RouterView } from 'vue-router'
-import { ref, onMounted, onUnmounted } from 'vue'
+import { RouterView, useRouter } from 'vue-router'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   House, Edit, Share, DataBoard, Folder, 
-  Menu as MenuIcon, Close, Moon, Sunny 
+  Menu as MenuIcon, Close, Moon, Sunny, User, SwitchButton
 } from '@element-plus/icons-vue'
+import { authAPI } from '@/services/api'
 
+const router = useRouter()
 const isMobile = ref(false)
 const mobileMenuVisible = ref(false)
 const isDark = ref(false)
+
+// 用户认证状态
+const userInfo = ref<any>(null)
+const isLoggedIn = computed(() => !!userInfo.value)
+
+// 初始化用户状态
+const initUserState = () => {
+  const savedUserInfo = localStorage.getItem('userInfo')
+  if (savedUserInfo) {
+    try {
+      userInfo.value = JSON.parse(savedUserInfo)
+    } catch (error) {
+      console.error('Failed to parse user info:', error)
+      localStorage.removeItem('userInfo')
+      localStorage.removeItem('authToken')
+    }
+  }
+}
+
+// 退出登录
+const handleLogout = async () => {
+  try {
+    await ElMessageBox.confirm('确定要退出登录吗？', '退出登录', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    
+    try {
+      await authAPI.logout()
+    } catch (error) {
+      console.error('Logout API error:', error)
+    }
+    
+    // 清除本地存储
+    localStorage.removeItem('authToken')
+    localStorage.removeItem('userInfo')
+    userInfo.value = null
+    
+    ElMessage.success('已退出登录')
+    
+    // 如果当前页面需要登录，跳转到首页
+    const currentRoute = router.currentRoute.value.path
+    if (['/git', '/metadata'].includes(currentRoute)) {
+      router.push('/')
+    }
+  } catch (error) {
+    // 用户取消退出
+  }
+}
+
+// 跳转到登录页
+const goToLogin = () => {
+  router.push('/login')
+}
 
 // 主题切换功能
 const toggleTheme = () => {
@@ -50,6 +108,7 @@ const toggleMobileMenu = () => {
 
 onMounted(() => {
   initTheme()
+  initUserState()
   checkScreenSize()
   window.addEventListener('resize', checkScreenSize)
 })
@@ -101,8 +160,39 @@ onUnmounted(() => {
             </el-menu-item>
           </el-menu>
           
-          <!-- 桌面端主题切换按钮 -->
+          <!-- 桌面端控制按钮 -->
           <div v-if="!isMobile" class="theme-controls">
+            <!-- 用户信息 -->
+            <div v-if="isLoggedIn" class="user-info">
+              <el-dropdown trigger="click">
+                <el-button type="primary" plain>
+                  <el-icon><User /></el-icon>
+                  <span>{{ userInfo?.username }}</span>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item>
+                      <div class="user-details">
+                        <div><strong>{{ userInfo?.username }}</strong></div>
+                        <div class="user-email">{{ userInfo?.email || '无邮箱' }}</div>
+                      </div>
+                    </el-dropdown-item>
+                    <el-dropdown-item divided @click="handleLogout">
+                      <el-icon><SwitchButton /></el-icon>
+                      退出登录
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+            
+            <!-- 登录按钮 -->
+            <el-button v-else type="primary" @click="goToLogin" plain>
+              <el-icon><User /></el-icon>
+              登录
+            </el-button>
+            
+            <!-- 主题切换按钮 -->
             <el-button
               type="primary"
               :icon="isDark ? Sunny : Moon"
@@ -159,6 +249,39 @@ onUnmounted(() => {
             <el-icon><Folder /></el-icon>
             <span>Git仓库</span>
           </el-menu-item>
+          
+          <!-- 移动端用户信息 -->
+          <div class="mobile-user-section">
+            <div v-if="isLoggedIn" class="mobile-user-info">
+              <div class="user-card">
+                <el-icon><User /></el-icon>
+                <div class="user-text">
+                  <div class="username">{{ userInfo?.username }}</div>
+                  <div class="user-email">{{ userInfo?.email || '无邮箱' }}</div>
+                </div>
+              </div>
+              <el-button
+                type="danger"
+                @click="handleLogout"
+                size="small"
+                plain
+                style="width: 100%; margin-top: 8px;"
+              >
+                <el-icon><SwitchButton /></el-icon>
+                退出登录
+              </el-button>
+            </div>
+            
+            <el-button v-else
+              type="primary"
+              @click="goToLogin"
+              size="default"
+              style="width: 100%; margin-top: 10px;"
+            >
+              <el-icon><User /></el-icon>
+              登录
+            </el-button>
+          </div>
           
           <!-- 移动端主题切换 -->
           <div class="mobile-theme-toggle">
@@ -359,5 +482,83 @@ html.dark {
   .menu-text {
     margin-left: 5px;
   }
+}
+
+/* 用户界面样式 */
+.theme-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-info .el-button {
+  max-width: 150px;
+}
+
+.user-info .el-button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-details {
+  padding: 5px 0;
+  text-align: center;
+}
+
+.user-details .user-email {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 2px;
+}
+
+/* 移动端用户界面样式 */
+.mobile-user-section {
+  padding: 15px;
+  border-top: 1px solid var(--border-color);
+  margin-top: 10px;
+}
+
+.mobile-user-info .user-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: var(--card-bg);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.mobile-user-info .user-text {
+  flex: 1;
+}
+
+.mobile-user-info .username {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-color);
+}
+
+.mobile-user-info .user-email {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 2px;
+}
+
+.mobile-theme-toggle {
+  padding: 0 15px 15px 15px;
+}
+
+/* 深色模式用户界面适配 */
+html.dark .user-details .user-email {
+  color: #94a3b8;
+}
+
+html.dark .mobile-user-info .username {
+  color: #f8fafc;
+}
+
+html.dark .mobile-user-info .user-email {
+  color: #94a3b8;
 }
 </style>
